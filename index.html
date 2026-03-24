@@ -99,6 +99,7 @@ body::before{
   left:50%;transform:translateX(-50%);
   overflow:hidden;
   padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
 }
 
 /* ── App Switcher (top) ─────────────────────────────── */
@@ -152,7 +153,6 @@ body::before{
 }
 #bottom-nav>div{
   display:flex;width:100%;
-  padding-bottom:env(safe-area-inset-bottom,0px);
 }
 #bottom-nav button{
   flex:1;padding:10px 4px 9px;
@@ -817,6 +817,17 @@ button{
   <div class="label2">Import — paste JSON below</div>
   <textarea id="import-ta" rows="4" placeholder="Paste exported JSON here…" style="resize:vertical;font-size:11px;margin-bottom:8px"></textarea>
   <button class="btn-acc" style="width:100%" onclick="importJSON()">⬇ Import & Restore</button>
+  <div style="margin-top:16px;border-top:1px solid var(--bdr);padding-top:14px">
+    <div class="label2" style="color:var(--red);margin-bottom:8px">Danger Zone</div>
+    <button id="clear-btn" class="btn-red btn-sm" style="width:100%;padding:10px;font-size:10px;border-radius:var(--radius-xs)" onclick="clearAllDataStep1()">🗑 Clear All Data</button>
+    <div id="clear-confirm" style="display:none;margin-top:10px;background:rgba(255,107,122,0.08);border:1px solid rgba(255,107,122,0.3);border-radius:var(--radius-xs);padding:12px">
+      <div style="font-size:11px;color:var(--red);margin-bottom:10px;line-height:1.5">⚠ This will permanently erase ALL your data — shifts, budgets, accounts, transactions, everything. This cannot be undone.</div>
+      <div class="flex gap8">
+        <button class="btn-red" style="flex:1;padding:9px;font-size:10px;border-radius:var(--radius-xs);background:rgba(255,107,122,0.15)" onclick="clearAllDataConfirmed()">Yes, erase everything</button>
+        <button class="btn-ghost btn-sm" style="flex:1" onclick="clearAllDataCancel()">Cancel</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -3878,7 +3889,7 @@ function renderSnapshots(){
           <div>
             <div style="font-size:9px;color:var(--mut);letter-spacing:1px;margin-bottom:3px">${MONTHS[d.getMonth()].toUpperCase()} ${d.getDate()}, ${d.getFullYear()}</div>
             <div style="font-size:18px;font-weight:bold;color:${s.netWorth>=0?'var(--grn)':'var(--red)'}">${fmt$(s.netWorth,true)}</div>
-            <div style="font-size:9px;color:var(--mut);margin-top:3px">Assets ${fmt$(s.assets)} · Debts ${fmt$(s.debts)}</div>
+            <div style="font-size:9px;color:var(--mut);margin-top:3px">Assets ${fmt$(parseFloat(s.assets)||0)} · Debts ${fmt$(parseFloat(s.debts)||0)}</div>
             ${s.note?`<div style="font-size:9px;color:var(--acc);margin-top:4px;font-style:italic">"${s.note}"</div>`:''}
           </div>
           <button class="btn-sm btn-red" onclick="delSnapshot('${s.id}')">✕</button>
@@ -4805,8 +4816,53 @@ function addAutoCatRule(){
 }
 
 // ─── Data Panel ───────────────────────────────────────────────────────────────
-function toggleDataPanel(){document.getElementById('data-panel').classList.toggle('open');}
+function toggleDataPanel(){
+  const p=document.getElementById('data-panel');
+  if(!p.classList.contains('open')){
+    // Reset clear confirm state when opening
+    const cc=document.getElementById('clear-confirm');
+    const cb=document.getElementById('clear-btn');
+    if(cc)cc.style.display='none';
+    if(cb)cb.style.display='block';
+  }
+  p.classList.toggle('open');
+}
 function closeDataPanel(){document.getElementById('data-panel').classList.remove('open');}
+function clearAllDataStep1(){
+  document.getElementById('clear-confirm').style.display='block';
+  document.getElementById('clear-btn').style.display='none';
+}
+function clearAllDataCancel(){
+  document.getElementById('clear-confirm').style.display='none';
+  document.getElementById('clear-btn').style.display='block';
+}
+function clearAllDataConfirmed(){
+  // Clear all known localStorage keys
+  const keys=['sch_v3','ded_v3','log_v3','pause_v3','custom_shifts_v1','paychecks_v1',
+    'budget_expenses_v1','budget_goals_v1','budget_debts_v1','envelopes_v1','assets_v1',
+    'tax_rate_v1','pin_v1','snapshots_v1','milestones_v1','ret401k_v1','side_income_v1',
+    'savings_challenge_v1','transactions_v1','early_deposit_v1','income_thresholds_v1',
+    'auto_cat_rules_v1','__activeApp__'];
+  keys.forEach(k=>localStorage.removeItem(k));
+  // Reset state to defaults
+  S={
+    app:'tracker',trackerTab:'tracker',budgetTab:'overview',worthTab:'networth',
+    histMode:'weeks',forecastMode:'4weeks',calTab:'calendar',expandedWk:null,
+    schedule:{...DEFAULT_SCH,shifts:{...DEFAULT_SCH.shifts}},
+    deductions:[],log:{},customShifts:[],paychecks:{},envelopes:{},assets:[],
+    snapshots:[],milestones:[],
+    retirement401k:{accountBalance:'',balanceAnchor:null,employeeType:'percent',
+      employeeAmount:'',matchFormula:'100',matchUpTo:'3',rothOrPretax:'pretax'},
+    sideIncome:[],savingsChallenge:null,taxRate:'',earlyDepositDays:0,pin:'',
+    calLegendHidden:false,expenses:[],goals:[],debts:[],transactions:[],
+    incomeSafetyThresholds:{monthlyFloor:'',notifyOnShortfall:true},autoCatRules:[],
+    pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null},
+  };
+  closeDataPanel();
+  render();
+  const t=document.getElementById('save-toast'),m=document.getElementById('toast-msg');
+  if(t&&m){t.classList.remove('manual');t.classList.add('manual');m.textContent='ALL DATA CLEARED';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+}
 function exportJSON(){
   const bundle={schedule:S.schedule,deductions:S.deductions,log:S.log,customShifts:S.customShifts,paychecks:S.paychecks,expenses:S.expenses,goals:S.goals,debts:S.debts,
     envelopes:S.envelopes,assets:S.assets,snapshots:S.snapshots,milestones:S.milestones,
