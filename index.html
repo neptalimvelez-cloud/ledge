@@ -98,8 +98,6 @@ body::before{
   width:100%;max-width:560px;
   left:50%;transform:translateX(-50%);
   overflow:hidden;
-  padding-top:env(safe-area-inset-top,0px);
-  padding-bottom:env(safe-area-inset-bottom,0px);
 }
 
 /* ── App Switcher (top) ─────────────────────────────── */
@@ -235,7 +233,7 @@ body::before{
 /* ── Toast ──────────────────────────────────────────── */
 #save-toast{
   position:fixed;left:50%;transform:translateX(-50%);
-  bottom:calc(60px + var(--safe-bot));
+  bottom:72px;
   background:rgba(93,232,160,0.12);
   backdrop-filter:var(--glass-blur-sm);
   -webkit-backdrop-filter:var(--glass-blur-sm);
@@ -605,7 +603,7 @@ button{
 /* ── Data panel ─────────────────────────────────────── */
 #data-panel{
   position:fixed;
-  bottom:calc(60px + var(--safe-bot));
+  bottom:60px;
   left:50%;transform:translateX(-50%);
   width:100%;max-width:560px;
   background:rgba(10,12,22,0.92);
