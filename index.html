@@ -870,6 +870,8 @@ let S={
   goals:[],
   debts:[],
   transactions:[], // [{id,date,description,amount,category,source,imported}]
+  incomeSafetyThresholds:{monthlyFloor:'',notifyOnShortfall:true}, // income threshold alerts
+  autoCatRules:[], // [{id,keyword,category}] user-defined auto-categorize rules
   pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null},
 };
 
@@ -881,6 +883,7 @@ function loadState(){
         snp=lsGet('snapshots_v1'),mls=lsGet('milestones_v1'),
         r401=lsGet('ret401k_v1'),si=lsGet('side_income_v1'),sc=lsGet('savings_challenge_v1'),
         txns=lsGet('transactions_v1');
+  const ist=lsGet('income_thresholds_v1'),acr=lsGet('auto_cat_rules_v1');
   if(sch)S.schedule={...DEFAULT_SCH,...sch,shifts:{...DEFAULT_SCH.shifts,...sch.shifts}};
   if(ded)S.deductions=ded;
   if(log)S.log=log;
@@ -899,6 +902,8 @@ function loadState(){
   if(si)S.sideIncome=si;
   if(sc)S.savingsChallenge=sc;
   if(txns)S.transactions=txns;
+  if(ist)S.incomeSafetyThresholds={...S.incomeSafetyThresholds,...ist};
+  if(acr)S.autoCatRules=acr;
   const edd=lsGet('early_deposit_v1');if(edd!=null)S.earlyDepositDays=edd;
   if(ps&&ps.dayKey===dayKey(new Date()))S.pause=ps;
   // On load: remove log entries only for the specific dates covered by custom shifts
@@ -926,6 +931,7 @@ function save(key){
     envelopes:'envelopes_v1',assets:'assets_v1',taxRate:'tax_rate_v1',pin:'pin_v1',
     snapshots:'snapshots_v1',milestones:'milestones_v1',
     transactions:'transactions_v1',
+    incomeSafetyThresholds:'income_thresholds_v1',autoCatRules:'auto_cat_rules_v1',
     retirement401k:'ret401k_v1',sideIncome:'side_income_v1',savingsChallenge:'savings_challenge_v1',
     earlyDepositDays:'early_deposit_v1'
   };
@@ -1536,6 +1542,63 @@ function renderTrackerTab(now,rate,ws,wk){
         </div>
       </div>`;
     })()}
+
+    <!-- Bills Due Before Next Payday -->
+    ${(()=>{
+      const payD=payDateForWeek(wk);
+      const today=new Date();today.setHours(0,0,0,0);
+      const upcoming=S.expenses.filter(e=>{
+        if(e.active===false||e.archived||e.paid)return false;
+        if(e.frequency==='one-time'&&e.oneTimeDate){const d=parseLocal(e.oneTimeDate);return d>=today&&d<=payD;}
+        if(e.dayOfMonth){const dom=parseInt(e.dayOfMonth);for(let i=0;i<14;i++){const dd=new Date(today);dd.setDate(dd.getDate()+i);if(dd>payD)break;if(dd.getDate()===dom)return true;}return false;}
+        return false;
+      });
+      const upDebt=S.debts.filter(d=>{
+        if(!d.dayOfMonth)return false;
+        const dom=parseInt(d.dayOfMonth);
+        for(let i=0;i<14;i++){const dd=new Date(today);dd.setDate(dd.getDate()+i);if(dd>payD)break;if(dd.getDate()===dom)return true;}
+        return false;
+      });
+      const allDue=[...upcoming.map(e=>({label:e.label,amount:parseFloat(e.amount)||0,type:'expense',cat:e.category})),...upDebt.map(d=>({label:d.label+' (min)',amount:parseFloat(d.minimum)||0,type:'debt'}))];
+      const totalDue=allDue.reduce((s,d)=>s+d.amount,0);
+      if(!allDue.length)return'';
+      return'<div style="padding:14px 20px;border-bottom:1px solid var(--bdr)">'
+        +'<div class="label" style="margin-bottom:8px">Due Before Next Payday</div>'
+        +'<div class="card" style="border-left:2px solid var(--org)">'
+        +allDue.map(d=>'<div class="flex" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr)"><span style="font-size:11px;color:var(--txt)">'+d.label+'</span><span style="font-size:11px;color:var(--red)">−'+fmt$(d.amount)+'</span></div>').join('')
+        +'<div class="flex" style="justify-content:space-between;padding:8px 0;font-weight:bold"><span style="font-size:12px">Total Due</span><span style="font-size:14px;color:var(--red)">−'+fmt$(totalDue)+'</span></div>'
+        +(wNetTotal>0?'<div style="font-size:9px;color:'+(wNetTotal>=totalDue?'var(--grn)':'var(--org)')+'">Week net '+fmt$(wNetTotal)+' '+(wNetTotal>=totalDue?'covers these bills':'may not cover — plan ahead')+'</div>':'')
+        +'</div></div>';
+    })()}
+
+    <!-- Quick Add Expense -->
+    <div style="padding:10px 20px;border-bottom:1px solid var(--bdr)">
+      <div id="quick-tx-area"></div>
+      <button class="btn-ghost btn-sm" style="width:100%;border:1px dashed var(--bdrh);color:var(--red)" onclick="toggleQuickTx()">−$ Quick Expense</button>
+    </div>
+
+    <!-- Paycheck Variance Insights -->
+    ${(()=>{
+      const pcEntries=Object.entries(S.paychecks).filter(([,pc])=>pc.amount).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,8);
+      if(pcEntries.length<2)return'';
+      const variances=pcEntries.map(([wkS,pc])=>{
+        const dm=S.log[wkS]||{};const cg=csInWeek(wkS).reduce((s,c)=>s+csGross(c),0);
+        const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkS));
+        const proj=applyDed(g,S.deductions);return{wk:wkS,actual:pc.amount,proj,diff:pc.amount-proj};
+      });
+      const avgVar=variances.reduce((s,v)=>s+v.diff,0)/variances.length;
+      const trend4=variances.slice(0,4);
+      const avg4=trend4.reduce((s,v)=>s+v.diff,0)/trend4.length;
+      const flagged=variances.filter(v=>Math.abs(v.diff/Math.max(v.proj,1))>0.15);
+      return'<div style="padding:14px 20px;border-bottom:1px solid var(--bdr)">'
+        +'<div class="label">Earnings Insights</div>'
+        +'<div class="flex gap8 mb12">'
+        +'<div class="stat-box" style="border-left:2px solid '+(avgVar>=0?'var(--grn)':'var(--red)')+'"><div class="sl">Avg Variance</div><div class="sv" style="color:'+(avgVar>=0?'var(--grn)':'var(--red)')+'">'+fmt$(avgVar,true)+'</div><div style="font-size:8px;color:var(--mut);margin-top:2px">'+pcEntries.length+' paychecks</div></div>'
+        +'<div class="stat-box" style="border-left:2px solid '+(avg4>=0?'var(--grn)':'var(--red)')+'"><div class="sl">Last 4 Wks</div><div class="sv" style="color:'+(avg4>=0?'var(--grn)':'var(--red)')+'">'+fmt$(avg4,true)+'</div><div style="font-size:8px;color:var(--mut);margin-top:2px">avg per week</div></div>'
+        +'</div>'
+        +(flagged.length?'<div style="font-size:9px;color:var(--org);margin-bottom:8px;padding:6px 10px;background:var(--orgd);border:1px solid rgba(255,173,107,.25)">'+flagged.length+' week'+(flagged.length>1?'s':'')+' with 15%+ variance — check for shift swaps or OT changes</div>':'')
+        +'</div>';
+    })()}
   </div>`;
 }
 
@@ -1546,6 +1609,38 @@ function savePaycheck(wk,field,val){
   if(!S.paychecks[wk].amount)delete S.paychecks[wk];
   save('paychecks');
   render();
+}
+
+// Quick-add transaction from Tracker
+let _quickTxOpen=false;
+function toggleQuickTx(){
+  _quickTxOpen=!_quickTxOpen;
+  const area=document.getElementById('quick-tx-area');
+  if(!area)return;
+  if(!_quickTxOpen){area.innerHTML='';return;}
+  area.innerHTML='<div class="inline-form mb8">'
+    +'<div class="label">Quick Expense</div>'
+    +'<div class="flex gap8 mb10">'
+    +'<div class="f1"><div class="label2">Amount</div><div class="inp-row"><span class="pre">$</span>'
+    +'<input id="qtx-amt" type="number" min="0" step=".01" placeholder="0.00" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>'
+    +'<div class="f1"><div class="label2">Description</div><input id="qtx-desc" placeholder="e.g. Coffee, Gas"></div>'
+    +'</div>'
+    +'<div class="label2">Category</div>'
+    +'<div class="chips mb10">'+CATS.slice(0,8).map(function(c){return'<button class="chip" style="color:'+c.color+'" onclick="this.parentNode.querySelectorAll(\'.chip\').forEach(function(b){b.classList.remove(\'active\');b.style.borderColor=\'\';b.style.background=\'\'});this.classList.add(\'active\');this.style.borderColor=\''+c.color+'\';this.style.background=\''+c.color+'22\';this.dataset.cat=\''+c.id+'\'" data-cat="'+c.id+'">'+c.icon+' '+c.label+'</button>';}).join('')+'</div>'
+    +'<div class="flex gap8"><button class="btn-acc f1" onclick="saveQuickTx()">Add Expense</button>'
+    +'<button class="btn-ghost" onclick="_quickTxOpen=false;document.getElementById(\'quick-tx-area\').innerHTML=\'\'">Cancel</button></div>'
+    +'</div>';
+}
+function saveQuickTx(){
+  const amt=parseFloat(document.getElementById('qtx-amt')?.value);
+  const desc=document.getElementById('qtx-desc')?.value||'Manual entry';
+  if(!amt)return;
+  const activeChip=document.querySelector('#quick-tx-area .chip.active');
+  const cat=activeChip?.dataset?.cat||'custom';
+  S.transactions=[...S.transactions,{id:Date.now().toString(),date:todayStr(),description:desc,amount:-Math.abs(amt),category:cat,type:'purchase',imported:false}];
+  save('transactions');_quickTxOpen=false;
+  const area=document.getElementById('quick-tx-area');if(area)area.innerHTML='';
+  showToast(true);
 }
 
 function handlePause(){
@@ -1785,7 +1880,8 @@ function renderHistoryTab(rate){
       return`<div class="wk-row" style="border-left:2px solid ${cur?'var(--acc)':'var(--bdr)'}">
         <div class="wk-hdr" onclick="toggleWk('${w.key}')">
           <div>
-            <div style="font-size:9px;letter-spacing:2px;color:${cur?'var(--acc)':'var(--mut)'}">WK OF ${MONTHS[d.getMonth()].toUpperCase()} ${d.getDate()}, ${d.getFullYear()}${cur?' · NOW':''}</div>
+            <div style="font-size:9px;letter-spacing:2px;color:${cur?'var(--acc)':'var(--mut)'}">PAID ${(()=>{const pd=payDateForWeek(w.key);return MONTHS[pd.getMonth()].toUpperCase()+' '+pd.getDate()+', '+pd.getFullYear();})()}${cur?' · NOW':''}</div>
+            <div style="font-size:8px;color:var(--mut2);margin-top:1px">Work wk ${MONTHS[d.getMonth()]} ${d.getDate()} – ${(()=>{const we=wkEnd(d);return MONTHS[we.getMonth()]+' '+we.getDate();})()}</div>
             <div class="flex gap14 mt4" style="font-size:10px">
               <span class="mut">Gross <span style="color:var(--txt)">${fmt$(w.gross)}</span></span>
               ${ded>0?`<span class="mut">Ded <span style="color:var(--red)">−${fmt$(ded)}</span></span>`:''}
@@ -2195,12 +2291,6 @@ function renderSetupTab(){
       <button class="btn-ghost btn-sm" style="width:100%;margin-top:4px" onclick="schBreakAdd()">+ Add Break Rule</button>
     </div>
 
-    <!-- Annual goal -->
-    <div class="section">
-      <div class="label">Annual Net Income Goal (optional)</div>
-      <div class="inp-row"><span class="pre" style="font-size:18px">$</span><input id="s-goal" type="number" min="0" step="100" placeholder="0" value="${e.annualGoal||''}" style="font-size:24px;border:none;background:transparent;padding:10px 8px"></div>
-    </div>
-
     <!-- Presets -->
     <div class="section">
       <div class="label">Quick Presets</div>
@@ -2252,6 +2342,26 @@ function renderSetupTab(){
       <div style="font-size:9px;color:var(--mut);margin-top:6px">Applied as a percent deduction on all gross earnings throughout the app.</div>
     </div>
 
+    <!-- Income Calculator -->
+    <div class="card mt14" style="border:1px solid var(--bdrh)">
+      <div class="label">Income Calculator</div>
+      <div style="font-size:10px;color:var(--mut);margin-bottom:10px;line-height:1.6">Convert between hourly rate, annual salary, and take-home pay.</div>
+      <div id="income-calc-area">
+        <div class="flex gap8 mb10">
+          <div class="f1"><div class="label2">Annual Target</div><div class="inp-row"><span class="pre">$</span><input id="ic-annual" type="number" min="0" step="1000" placeholder="50000" oninput="calcIncome('annual')" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
+          <div class="f1"><div class="label2">Hours / Week</div><input id="ic-hrs" type="number" min="1" max="80" step="1" value="40" oninput="calcIncome('hrs')"></div>
+        </div>
+        <div id="ic-result" style="font-size:10px;color:var(--acc);line-height:1.8;min-height:40px"></div>
+      </div>
+    </div>
+
+    <!-- Income Safety Threshold -->
+    <div class="card mt14" style="border:1px solid var(--bdrh)">
+      <div class="label">Income Safety Floor</div>
+      <div style="font-size:10px;color:var(--mut);margin-bottom:10px;line-height:1.6">Get an alert on Budget Overview when monthly earnings fall below this target.</div>
+      <div class="inp-row"><span class="pre">$</span><input id="s-floor" type="number" min="0" step="100" placeholder="No floor set" value="${S.incomeSafetyThresholds.monthlyFloor||''}" onblur="S.incomeSafetyThresholds.monthlyFloor=this.value;save('incomeSafetyThresholds')" style="border:none;background:transparent;font-size:18px;padding:8px 4px"><span style="padding:0 10px;color:var(--mut);font-size:10px">/ month</span></div>
+    </div>
+
     <!-- PIN -->
     <div class="card mt14" style="border:1px solid var(--bdrh)">
       <div class="label">App PIN Lock</div>
@@ -2265,13 +2375,69 @@ function renderSetupTab(){
     <button class="btn-acc mt18" style="width:100%;padding:14px;font-size:11px;letter-spacing:3px" onclick="saveSetup()">Save Schedule</button>
   </div>`;
 }
-function setSchOtMode(v){if(!_editSch)return;_editSch.overtimeMode=v;renderSetupTab();}
-function toggleShift(dow){if(!_editSch)return;_editSch.shifts[dow].active=!_editSch.shifts[dow].active;renderSetupTab();}
+function setSchOtMode(v){
+  if(!_editSch)return;
+  // Snapshot current DOM values before re-render so they aren't lost
+  const ota=document.getElementById('s-ota')?.value;
+  const otm=document.getElementById('s-otm2')?.value;
+  const rate=document.getElementById('s-rate')?.value;
+  const wsd=document.getElementById('s-wsd')?.value;
+  const wst=document.getElementById('s-wst')?.value;
+  if(rate!==undefined)_editSch.hourlyRate=rate;
+  if(wsd!==undefined)_editSch.weekStartDay=wsd;
+  if(wst!==undefined)_editSch.weekStartTime=wst;
+  if(otm!==undefined)_editSch.overtimeMultiplier=otm;
+  _editSch.overtimeMode=v;
+  // Default to 40 hrs when switching to Per Week if currently empty or was the shift default (≤12)
+  const curOta=parseFloat(ota)||0;
+  if(v==='week'&&(curOta===0||curOta<=12)){_editSch.overtimeAfter='40';}
+  else if(v==='shift'&&(curOta===0||curOta>=40)){_editSch.overtimeAfter='8';}
+  else{_editSch.overtimeAfter=ota||'';}
+  renderSetupTab();
+}
+function toggleShift(dow){
+  if(!_editSch)return;
+  const rate=document.getElementById('s-rate')?.value;
+  const ota=document.getElementById('s-ota')?.value;
+  const otm=document.getElementById('s-otm2')?.value;
+  const tax=document.getElementById('s-tax')?.value;
+  if(rate!==undefined)_editSch.hourlyRate=rate;
+  if(ota!==undefined)_editSch.overtimeAfter=ota;
+  if(otm!==undefined)_editSch.overtimeMultiplier=otm;
+  if(tax!==undefined)_editSch.taxRate=tax;
+  _editSch.shifts[dow].active=!_editSch.shifts[dow].active;
+  renderSetupTab();
+}
 function patchShift(dow,k,v){if(!_editSch)return;_editSch.shifts[dow][k]=v;}
-function applyPreset(p){if(!_editSch)return;for(let d=0;d<7;d++)_editSch.shifts[d]={active:p.days.includes(d),start:p.start,end:p.end};renderSetupTab();}
+function applyPreset(p){
+  if(!_editSch)return;
+  const rate=document.getElementById('s-rate')?.value;
+  const ota=document.getElementById('s-ota')?.value;
+  const otm=document.getElementById('s-otm2')?.value;
+  const tax=document.getElementById('s-tax')?.value;
+  if(rate!==undefined)_editSch.hourlyRate=rate;
+  if(ota!==undefined)_editSch.overtimeAfter=ota;
+  if(otm!==undefined)_editSch.overtimeMultiplier=otm;
+  if(tax!==undefined)_editSch.taxRate=tax;
+  for(let d=0;d<7;d++)_editSch.shifts[d]={active:p.days.includes(d),start:p.start,end:p.end};
+  renderSetupTab();
+}
 function applyBulk(){
   const s=document.getElementById('s-bs')?.value,e=document.getElementById('s-be')?.value;
   if(!_editSch||(!s&&!e))return;
+  // Snapshot all current DOM input values before re-render
+  const rate=document.getElementById('s-rate')?.value;
+  const wsd=document.getElementById('s-wsd')?.value;
+  const wst=document.getElementById('s-wst')?.value;
+  const ota=document.getElementById('s-ota')?.value;
+  const otm=document.getElementById('s-otm2')?.value;
+  const tax=document.getElementById('s-tax')?.value;
+  if(rate!==undefined)_editSch.hourlyRate=rate;
+  if(wsd!==undefined)_editSch.weekStartDay=wsd;
+  if(wst!==undefined)_editSch.weekStartTime=wst;
+  if(ota!==undefined)_editSch.overtimeAfter=ota;
+  if(otm!==undefined)_editSch.overtimeMultiplier=otm;
+  if(tax!==undefined)_editSch.taxRate=tax;
   for(let d=0;d<7;d++){if(_editSch.shifts[d].active){if(s)_editSch.shifts[d].start=s;if(e)_editSch.shifts[d].end=e;}}
   renderSetupTab();
 }
@@ -2286,13 +2452,36 @@ function saveSetup(){
   const wst=document.getElementById('s-wst')?.value||'00:00';
   const ota=document.getElementById('s-ota')?.value||'';
   const otm=document.getElementById('s-otm2')?.value||'';
-  const goal=document.getElementById('s-goal')?.value||'';
   const tax=document.getElementById('s-tax')?.value||'';
   _editSch.hourlyRate=rate;_editSch.weekStartDay=wsd;_editSch.weekStartTime=wst;
-  _editSch.overtimeAfter=ota;_editSch.overtimeMultiplier=otm;_editSch.annualGoal=goal;
+  _editSch.overtimeAfter=ota;_editSch.overtimeMultiplier=otm;
   S.taxRate=tax;S.schedule={..._editSch};
   S.pause={paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null};
   save('schedule');save('pause');save('taxRate');showToast(true);S.trackerTab='tracker';render();
+}
+
+// Income Calculator
+function calcIncome(src){
+  const annualEl=document.getElementById('ic-annual'),hrsEl=document.getElementById('ic-hrs'),resEl=document.getElementById('ic-result');
+  if(!resEl)return;
+  const annual=parseFloat(annualEl?.value)||0;
+  const hrs=parseFloat(hrsEl?.value)||40;
+  const taxPct=parseFloat(S.taxRate)||0;
+  const rate=parseFloat(S.schedule.hourlyRate)||0;
+  let lines=[];
+  if(annual>0){
+    const implied=annual/(hrs*52);
+    const afterTax=annual*(1-taxPct/100);
+    lines.push('At '+fmt$(annual)+'/yr with '+hrs+'h/wk → '+fmt$(implied)+'/hr');
+    if(taxPct>0)lines.push('After '+taxPct+'% tax: '+fmt$(afterTax)+'/yr · '+fmt$(afterTax/12)+'/mo');
+  }
+  if(rate>0){
+    const annFromRate=rate*hrs*52;
+    const afterTax2=annFromRate*(1-taxPct/100);
+    lines.push('At current $'+rate.toFixed(2)+'/hr × '+hrs+'h/wk = '+fmt$(annFromRate)+'/yr');
+    if(taxPct>0)lines.push('Take-home: '+fmt$(afterTax2)+'/yr · '+fmt$(afterTax2/12)+'/mo · '+fmt$(afterTax2/52)+'/wk');
+  }
+  resEl.innerHTML=lines.length?lines.join('<br>'):'Enter an annual target or set your hourly rate above';
 }
 
 // ─── BUDGET ──────────────────────────────────────────────────────────────────
@@ -2457,6 +2646,42 @@ function renderBudgetOverview(){
   const txImportedIncome=S.transactions.filter(t=>{const type=(t.type||'').toLowerCase();const amt=parseFloat(t.amount)||0;return amt>0&&(type==='deposit'||type==='direct deposit'||type==='cash bonus'||type==='income');}).length;
   const txNote=S.transactions.length>0?`<div style="font-size:9px;color:var(--mut);margin-bottom:12px;padding:6px 10px;background:var(--surf);border-left:2px solid var(--blu)">⊞ ${S.transactions.length} imported transaction${S.transactions.length!==1?'s':''} · ${txImportedIncome} income · included in actuals · <button onclick="S.budgetTab='transactions';_txWizard.step='import';render()" style="font-size:9px;color:var(--blu);border:none;background:none;cursor:pointer;padding:0;text-decoration:underline">Manage</button></div>`:'';
 
+  // Income threshold alert
+  const incomeFloor=parseFloat(S.incomeSafetyThresholds.monthlyFloor)||0;
+  const incomeAlertHTML=(()=>{
+    if(!incomeFloor||!mActNetFinal)return'';
+    const dayOfMonth=now.getDate(),daysInMonth=new Date(yr,now.getMonth()+1,0).getDate();
+    const projected=mActNetFinal*(daysInMonth/dayOfMonth);
+    const shortfall=incomeFloor-projected;
+    if(shortfall<=0)return'';
+    return'<div style="font-size:10px;color:var(--org);margin-bottom:14px;padding:10px 12px;background:var(--orgd);border:1px solid rgba(255,173,107,.3);border-left:3px solid var(--org);line-height:1.6">'
+      +'⚠ '+MONTHS[now.getMonth()]+' income projected at '+fmt$(projected)+' — '+fmt$(shortfall)+' below your '+fmt$(incomeFloor)+' floor.'
+      +' Consider extra hours or cutting discretionary spend.</div>';
+  })();
+
+  // Budget variance — actual tx spend vs envelope/budget per category this month
+  const txSpendByCat=getTxSpendingByCategory(moStart,moEnd);
+  const budgetVarianceHTML=(()=>{
+    const cats=CATS.filter(c=>c.id!=='custom');
+    const rows=cats.map(c=>{
+      const budgeted=S.envelopes[c.id]||activeExp.filter(e=>e.active!==false&&e.category===c.id&&e.frequency!=='one-time').reduce((s,e)=>s+toMonthly(e),0);
+      const actual=txSpendByCat[c.id]||0;
+      if(!budgeted&&!actual)return null;
+      const diff=budgeted-actual;
+      const pct=budgeted>0?Math.round((actual/budgeted)*100):0;
+      return{cat:c,budgeted,actual,diff,pct};
+    }).filter(Boolean);
+    if(!rows.length)return'';
+    return'<div class="mb20"><div class="label">Budget vs Actual (This Month)</div>'
+      +rows.map(r=>'<div style="margin-bottom:8px">'
+        +'<div class="flex" style="justify-content:space-between;margin-bottom:3px">'
+        +'<span style="font-size:10px"><span style="color:'+r.cat.color+'">'+r.cat.icon+'</span> '+r.cat.label+'</span>'
+        +'<span style="font-size:9px;color:'+(r.diff>=0?'var(--grn)':'var(--red)')+'">'+fmt$(r.actual)+' / '+fmt$(r.budgeted)+(r.pct>0?' ('+r.pct+'%)':'')+'</span>'
+        +'</div>'
+        +'<div class="prog"><div class="prog-fill" style="width:'+Math.min(100,r.pct)+'%;background:'+(r.pct>100?'var(--red)':r.pct>80?'var(--org)':'var(--grn)')+'"></div></div>'
+        +'</div>').join('')
+      +'</div>';
+  })();
   // Upcoming one-time
   const upcoming=activeExp.filter(e=>e.frequency==='one-time'&&e.oneTimeDate&&!e.paid).map(e=>({...e,days:daysUntil(e.oneTimeDate)})).filter(e=>e.days>=-1&&e.days<=60).sort((a,b)=>a.days-b.days);
 
@@ -2501,6 +2726,7 @@ function renderBudgetOverview(){
       <div class="right"><div class="label2">Actual This Week</div><div style="font-size:16px;font-weight:bold;color:var(--grn)">${fmt$(wkActNetFinal)}</div></div>
     </div>`:''}
     ${txNote}
+    ${incomeAlertHTML}
     ${balCard(wBal,'This Week',wNet,recW,otW,connected?'from Pay Ledger':null,wkActNetFinal,wActBal)}
     ${balCard(mBal,'This Month',mNet,recM,otM,connected?'from Pay Ledger':null,mActNetFinal,mActBal)}
 
@@ -2587,6 +2813,19 @@ function renderBudgetOverview(){
       <div class="label">Monthly by Category</div>
       ${catSorted.map(([catId,amt])=>{const cat=catById[catId]||CATS[CATS.length-1],pct=catTotal>0?(amt/catTotal)*100:0;return`<div class="mb8"><div class="flex" style="justify-content:space-between;margin-bottom:4px"><span style="font-size:11px"><span style="color:${cat.color}">${cat.icon} </span>${cat.label}</span><span style="font-size:12px">${fmt$(amt)}</span></div><div class="prog"><div class="prog-fill" style="width:${pct}%;background:${cat.color};opacity:.8"></div></div></div>`;}).join('')}
     </div>`:''}
+
+    ${budgetVarianceHTML}
+
+    ${(()=>{
+      // Monthly actual spending from transactions by category
+      const txByCat=getTxSpendingByCategory(moStart,moEnd);
+      const txCats=Object.entries(txByCat).sort((a,b)=>b[1]-a[1]);
+      const txTotal=txCats.reduce((s,[,v])=>s+v,0);
+      if(!txTotal)return'';
+      return'<div class="mb20"><div class="label">Actual Spending This Month (from transactions)</div>'
+        +txCats.map(([catId,amt])=>{const cat=catById[catId]||CATS[CATS.length-1];const pct=txTotal>0?(amt/txTotal)*100:0;return'<div class="mb8"><div class="flex" style="justify-content:space-between;margin-bottom:4px"><span style="font-size:11px"><span style="color:'+cat.color+'">'+cat.icon+' </span>'+cat.label+'</span><span style="font-size:12px">'+fmt$(amt)+'</span></div><div class="prog"><div class="prog-fill" style="width:'+pct+'%;background:'+cat.color+';opacity:.8"></div></div></div>';}).join('')
+        +'<div style="font-size:9px;color:var(--mut);margin-top:6px">Total: '+fmt$(txTotal)+'</div></div>';
+    })()}
 
     ${upcoming.length?`<div>
       <div class="label">Upcoming One-Time</div>
@@ -2769,166 +3008,9 @@ function renderEnvelopes(){
   </div>`;
 }
 
-function renderBudgetForecast(){
-  const {wNet,mNet}=getBudgetIncome();
-  const now=new Date(),mode=S.forecastMode;
-  const activeExp=S.expenses.filter(e=>e.active!==false);
-
-  // Recurring monthly total (for any week/month without day-of-month specifics)
-  const recM=activeExp.filter(e=>e.frequency!=='one-time').reduce((s,e)=>s+toMonthly(e),0);
-
-  // Actual income helpers for current period
-  const curWkStart=getWeekStart(now,S.schedule.weekStartDay,S.schedule.weekStartTime);
-  const curWkEnd=wkEnd(curWkStart);
-  const curMoStart=new Date(now.getFullYear(),now.getMonth(),1);
-  const curMoEnd=new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59,999);
-  const txIncCurWk=getTxIncome(curWkStart,curWkEnd);
-  const txIncCurMo=getTxIncome(curMoStart,curMoEnd);
-  const siCurWk=S.sideIncome.filter(s=>s.frequency==='one-time'&&s.date&&(()=>{const d=parseLocal(s.date);return d>=curWkStart&&d<=curWkEnd;})()).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
-  const siCurMo=S.sideIncome.filter(s=>s.frequency==='one-time'&&s.date&&(()=>{const d=parseLocal(s.date);return d>=curMoStart&&d<=curMoEnd;})()).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
-  // Effective income: scheduled + any imported/side income boost for current period
-  const wNetEff=wNet+txIncCurWk+siCurWk;
-  const mNetEff=mNet+txIncCurMo+siCurMo;
-
-  let tabContent='';
-  if(mode==='4weeks'){
-    const sunWs=getWeekStart(now,'0','00:00');
-    const weeks=Array.from({length:4},(_,i)=>{
-      const ws=new Date(sunWs);ws.setDate(sunWs.getDate()+i*7);
-      const wExp=activeExp.reduce((s,e)=>s+(inWeek(e,ws)&&!e.paid?expWeekAmt(e,ws):0),0);
-      const effInc=i===0?wNetEff:wNet;
-      const bal=effInc-wExp;
-      const otAmt=activeExp.filter(e=>e.frequency==='one-time'&&!e.paid&&inWeek(e,ws)).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-      const d=new Date(ws);
-      return{label:i===0?'THIS WEEK':`WK OF ${MONTHS[d.getMonth()].toUpperCase()} ${d.getDate()}`,income:effInc,expenses:wExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
-    });
-    tabContent=weeks.map(w=>`<div class="card mb12" style="border-left:2px solid ${w.balance>=0?'var(--grn)':'var(--red)'}">
-      <div class="flex" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div><div style="font-size:9px;letter-spacing:2px;color:var(--mut);margin-bottom:3px">${w.label}</div>
-        <div class="flex" style="align-items:center;gap:8px"><div style="width:6px;height:6px;border-radius:50%;background:${w.balance>=0?'var(--grn)':'var(--red)'}"></div><span style="font-size:18px;font-weight:bold;color:${w.balance>=0?'var(--grn)':'var(--red)'}">${fmt$(w.balance,true)}</span></div></div>
-        <div class="right"><div style="font-size:9px;color:var(--mut)">${fmt$(w.income)} in</div><div style="font-size:9px;color:var(--red)">−${fmt$(w.expenses)} out</div></div>
-      </div>
-      <div class="bar-wrap" style="height:5px">
-        <div style="position:absolute;left:0;top:0;height:100%;width:${Math.min(100,(w.income/Math.max(w.income,w.expenses))*100)}%;background:var(--grn);opacity:.5;border-radius:2px"></div>
-        <div style="position:absolute;left:0;top:0;height:100%;width:${Math.min(100,(w.expenses/Math.max(w.income,w.expenses))*100)}%;background:var(--red);opacity:.4;border-radius:2px"></div>
-      </div>
-      ${w.hasOT?`<div style="font-size:9px;color:var(--acc);margin-top:8px">⚠ Includes ${fmt$(w.otAmt)} one-time</div>`:''}
-    </div>`).join('');
-  }else if(mode==='monthly'){
-    const months=Array.from({length:6},(_,i)=>{
-      const d=new Date(now.getFullYear(),now.getMonth()+i,1);
-      const mExp=activeExp.reduce((s,e)=>inMonth(e,d.getFullYear(),d.getMonth())&&!e.paid?s+expMonthAmt(e,d.getFullYear(),d.getMonth()):s,0);
-      const effInc=i===0?mNetEff:mNet;
-      const bal=effInc-mExp;
-      const otAmt=activeExp.filter(e=>e.frequency==='one-time'&&!e.paid&&inMonth(e,d.getFullYear(),d.getMonth())).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-      return{label:MONTHS[d.getMonth()],year:d.getFullYear(),income:effInc,expenses:mExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
-    });
-    tabContent=months.map(m=>`<div class="card mb12" style="border-left:2px solid ${m.balance>=0?'var(--grn)':'var(--red)'}">
-      <div class="flex" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div><div style="font-size:9px;letter-spacing:2px;color:${m.isCurrent?'var(--acc)':'var(--mut)'};margin-bottom:3px">${m.label.toUpperCase()} ${m.year}${m.isCurrent?' · NOW':''}</div>
-        <div class="flex" style="align-items:center;gap:8px"><div style="width:6px;height:6px;border-radius:50%;background:${m.balance>=0?'var(--grn)':'var(--red)'}"></div><span style="font-size:18px;font-weight:bold;color:${m.balance>=0?'var(--grn)':'var(--red)'}">${fmt$(m.balance,true)}</span></div></div>
-        <div class="right"><div style="font-size:9px;color:var(--mut)">${fmt$(m.income)} in</div><div style="font-size:9px;color:var(--red)">−${fmt$(m.expenses)} out</div></div>
-      </div>
-      <div class="bar-wrap" style="height:5px">
-        <div style="position:absolute;left:0;top:0;height:100%;width:${Math.min(100,(m.income/Math.max(m.income,m.expenses))*100)}%;background:var(--grn);opacity:.5;border-radius:2px"></div>
-        <div style="position:absolute;left:0;top:0;height:100%;width:${Math.min(100,(m.expenses/Math.max(m.income,m.expenses))*100)}%;background:var(--red);opacity:.4;border-radius:2px"></div>
-      </div>
-      ${m.hasOT?`<div style="font-size:9px;color:var(--acc);margin-top:8px">⚠ Includes ${fmt$(m.otAmt)} in one-time</div>`:''}
-    </div>`).join('');
-  }else{
-    // Calendar
-    const yr=_calYear,mo=_calMonth;
-    const firstDay=new Date(yr,mo,1).getDay();
-    const daysInMonth=new Date(yr,mo+1,0).getDate();
-    const cells=[];
-    for(let i=0;i<firstDay;i++)cells.push(null);
-    for(let d=1;d<=daysInMonth;d++)cells.push(d);
-    const expByDay={};
-    for(const e of S.expenses.filter(x=>x.active!==false)){
-      if(e.frequency==='one-time'&&e.oneTimeDate&&!e.paid){
-        const d=parseLocal(e.oneTimeDate);
-        if(d.getFullYear()===yr&&d.getMonth()===mo){const day=d.getDate();if(!expByDay[day])expByDay[day]=[];expByDay[day].push(e);}
-      }else if(e.frequency!=='one-time'&&e.dayOfMonth){
-        const dom=parseInt(e.dayOfMonth);if(dom>=1&&dom<=daysInMonth){if(!expByDay[dom])expByDay[dom]=[];expByDay[dom].push(e);}
-      }
-    }
-    const today=new Date(),isNow=today.getFullYear()===yr&&today.getMonth()===mo;
-    // Determine payday days
-    const paydays=new Set();
-    const rate2=parseFloat(S.schedule.hourlyRate)||0;
-    if(rate2){
-      // Pay week ends: find all week-end dates in this month
-      for(let d2=1;d2<=daysInMonth;d2++){
-        const dd2=new Date(yr,mo,d2);
-        const ws2=getWeekStart(dd2,S.schedule.weekStartDay,S.schedule.weekStartTime);
-        const we2=wkEnd(ws2);
-        if(we2.getFullYear()===yr&&we2.getMonth()===mo&&we2.getDate()===d2)paydays.add(d2);
-      }
-    }
-    const debtDays=new Set(S.debts.filter(d=>d.dayOfMonth).map(d=>parseInt(d.dayOfMonth)));
-    const savingsDays=new Set(S.expenses.filter(e=>e.category==='savings'&&e.dayOfMonth&&e.active!==false).map(e=>parseInt(e.dayOfMonth)));
-    const legend=S.calLegendHidden?'':
-      `<div class="cal-legend">
-        <div style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <span style="font-size:8px;letter-spacing:3px;color:var(--mut);text-transform:uppercase">Legend</span>
-          <button onclick="S.calLegendHidden=true;renderBudgetForecast()" style="font-size:8px;color:var(--mut);border:none;background:transparent;padding:0;cursor:pointer">Hide</button>
-        </div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#5b8de8"></div>PAYDAY</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--red)"></div>EXPENSE</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--org)"></div>DEBT DUE</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--grn)"></div>SAVINGS</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#9b7de8"></div>MULTIPLE</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--acc)"></div>TODAY</div>
-      </div>`;
-    const legendToggle=S.calLegendHidden?
-      `<button onclick="S.calLegendHidden=false;renderBudgetForecast()" style="font-size:8px;color:var(--mut);border:1px solid var(--bdrh);padding:3px 10px;cursor:pointer;margin-bottom:10px;display:block">Show Legend</button>`:'';
-
-    const calRows=`
-      ${legend}${legendToggle}
-      <div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:12px">
-        <button class="btn-ghost btn-sm" onclick="calPrev()">←</button>
-        <div style="font-size:12px;letter-spacing:2px">${MONTHS[mo].toUpperCase()} ${yr}</div>
-        <button class="btn-ghost btn-sm" onclick="calNext()">→</button>
-      </div>
-      <div class="cal-grid" style="margin-bottom:4px">${['S','M','T','W','T','F','S'].map(d=>`<div style="text-align:center;font-size:8px;color:var(--mut);padding:4px 0">${d}</div>`).join('')}</div>
-      <div class="cal-grid">${cells.map((day,i)=>{
-        if(!day)return'<div></div>';
-        const dayExps=expByDay[day]||[];
-        const total=dayExps.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-        const isToday=isNow&&today.getDate()===day;
-        const isPay=paydays.has(day);
-        const isDebt=debtDays.has(day);
-        const isSav=savingsDays.has(day);
-        const typeCount=[dayExps.length>0,isPay,isDebt,isSav].filter(Boolean).length;
-        let cls='cal-cell';
-        if(isToday)cls+=' today';
-        else if(typeCount>1)cls+=' cal-multi';
-        else if(dayExps.length)cls+=' cal-expense';
-        else if(isPay)cls+=' cal-payday';
-        else if(isDebt)cls+=' cal-debt';
-        else if(isSav)cls+=' cal-savings';
-        return`<div class="${cls}">
-          <div class="cal-day-num">${day}${isPay?'<span style="color:var(--blu);font-size:6px">$</span>':''}</div>
-          ${dayExps.length?`<div class="cal-lbl">${dayExps[0].label.slice(0,8)}</div><div class="cal-amt">−$${total.toFixed(0)}</div>`:isDebt?`<div class="cal-lbl" style="color:var(--org)">debt</div>`:''}
-        </div>`;
-      }).join('')}</div>
-      ${S.expenses.filter(e=>e.frequency!=='one-time'&&e.active!==false).length?`<div class="card mt16" style="border-left:2px solid var(--bdr)">
-        <div class="label2 mb8">Recurring This Month</div>
-        ${S.expenses.filter(e=>e.frequency!=='one-time'&&e.active!==false).map(e=>{const cat=catById[e.category]||CATS[CATS.length-1];return`<div class="row"><span class="rl"><span style="color:${cat.color}">${cat.icon} </span>${e.label}${e.dayOfMonth?` (day ${e.dayOfMonth})`:''}</span><span class="rr" style="color:var(--red)">−${fmt$(toMonthly(e))}</span></div>`;}).join('')}
-      </div>`:''}
-    `;
-    tabContent=calRows;
-  }
-
-  content.innerHTML=`<div class="page">
-    <div class="flex" style="border:1px solid var(--bdr);margin-bottom:20px">
-      ${[['4weeks','4 Weeks'],['monthly','6 Months'],['calendar','Calendar']].map(([v,l])=>`<button style="flex:1;padding:9px;background:${S.forecastMode===v?'var(--acc)':'transparent'};color:${S.forecastMode===v?'var(--bg)':'var(--mut)'};border:none;font-size:8px;letter-spacing:2px;font-weight:bold" onclick="S.forecastMode='${v}';renderBudgetForecast()">${l}</button>`).join('')}
-    </div>
-    ${tabContent}
-  </div>`;
-}
-function calPrev(){if(_calMonth===0){_calMonth=11;_calYear--;}else _calMonth--;renderBudgetForecast();}
-function calNext(){if(_calMonth===11){_calMonth=0;_calYear++;}else _calMonth++;renderBudgetForecast();}
+// calPrev/calNext used by Calendar app
+function calPrev(){if(_calMonth===0){_calMonth=11;_calYear--;}else _calMonth--;renderCalApp();}
+function calNext(){if(_calMonth===11){_calMonth=0;_calYear++;}else _calMonth++;renderCalApp();}
 
 // ─── BUDGET GOALS ─────────────────────────────────────────────────────────────
 let _showGoalForm=false,_goalForm={label:'',target:'',saved:'',accountId:''};
@@ -3293,7 +3375,21 @@ function renderBudgetDebt(){
         <div style="border-left:2px solid var(--grn);padding-left:8px"><div style="color:var(--mut);margin-bottom:2px">Debt-Free In</div><div style="color:var(--grn);font-weight:bold">${plan.months} months</div></div>
         <div style="border-left:2px solid var(--red);padding-left:8px"><div style="color:var(--mut);margin-bottom:2px">Total Interest</div><div style="color:var(--red);font-weight:bold">${fmt$(plan.totalInterest)}</div></div>
         <div style="border-left:2px solid var(--acc);padding-left:8px"><div style="color:var(--mut);margin-bottom:2px">Extra/Month</div><div style="color:var(--acc);font-weight:bold">${fmt$(effExtra)}</div></div>
-      </div>`:''}
+      </div>
+      ${(()=>{const freeDate=new Date();freeDate.setMonth(freeDate.getMonth()+plan.months);return'<div style="font-size:10px;color:var(--grn);margin-top:8px">Debt-free by '+MONTHS[freeDate.getMonth()]+' '+freeDate.getFullYear()+'</div>';})()}
+      ${(()=>{
+        const alt=_debtMethod==='snowball'?'avalanche':'snowball';
+        const altPlan=runDebtPlan(S.debts,effExtra,alt);
+        if(!altPlan.months)return'';
+        const diff=plan.totalInterest-altPlan.totalInterest;
+        const moDiff=plan.months-altPlan.months;
+        if(Math.abs(diff)<1&&Math.abs(moDiff)<1)return'';
+        return'<div style="font-size:9px;color:var(--mut);margin-top:6px;padding:6px 10px;background:var(--surf);border:1px solid var(--bdr)">'
+          +(alt==='avalanche'?'Avalanche':'Snowball')+' would '
+          +(diff>0?'save '+fmt$(Math.abs(diff))+' in interest':'cost '+fmt$(Math.abs(diff))+' more interest')
+          +(moDiff!==0?' and '+(moDiff>0?'finish '+Math.abs(moDiff)+' months sooner':'take '+Math.abs(moDiff)+' months longer'):'')
+          +'</div>';
+      })()}`:''}
     </div>`:''}
 
     ${S.debts.length?`<div class="card mb16">
@@ -3307,8 +3403,19 @@ function renderBudgetDebt(){
     </div>`:''}
 
     ${S.debts.length&&plan.events.length?`<div class="mb16">
-      <div class="label">Payoff Order (${_debtMethod})</div>
-      ${plan.events.map((e,i)=>{const yr=Math.floor(e.month/12),mo=e.month%12;return`<div class="payoff-item"><div class="flex" style="align-items:center;gap:10px"><div class="payoff-num">${i+1}</div><div><div style="font-size:12px">${e.label}</div><div style="font-size:9px;color:var(--mut)">Month ${e.month}</div></div></div><div style="font-size:10px;color:var(--grn)">${yr>0?`${yr}y `:''} ${mo>0?`${mo}mo`:yr===0?'<1mo':''}</div></div>`;}).join('')}
+      <div class="label">Payoff Timeline (${_debtMethod})</div>
+      ${(()=>{
+        const maxMo=plan.months||1;
+        return plan.events.map((e,i)=>{const pct=Math.round((e.month/maxMo)*100);const yr=Math.floor(e.month/12),mo=e.month%12;const freeDate=new Date();freeDate.setMonth(freeDate.getMonth()+e.month);
+          return'<div style="margin-bottom:8px">'
+            +'<div class="flex" style="justify-content:space-between;margin-bottom:3px;align-items:center">'
+            +'<div class="flex" style="align-items:center;gap:8px"><div class="payoff-num">'+(i+1)+'</div><span style="font-size:11px">'+e.label+'</span></div>'
+            +'<span style="font-size:9px;color:var(--grn)">'+(yr>0?yr+'y ':'')+mo+'mo · '+MONTHS[freeDate.getMonth()]+' '+freeDate.getFullYear()+'</span>'
+            +'</div>'
+            +'<div class="prog"><div class="prog-fill" style="width:'+pct+'%;background:var(--grn)"></div></div>'
+            +'</div>';
+        }).join('');
+      })()}
     </div>`:''}
 
     ${S.debts.map(d=>`<div class="card mb8" style="border-left:2px solid var(--red)">
@@ -3713,7 +3820,8 @@ function takeSnapshot(){
   const totalAssets=S.assets.reduce((s,a)=>s+(parseFloat(a.value)||0),0);
   const totalDebts=S.debts.reduce((s,d)=>s+(parseFloat(d.balance)||0),0);
   const nw=totalAssets-totalDebts;
-  S.snapshots=[...S.snapshots,{id:Date.now().toString(),date:todayStr(),netWorth:nw,assets:totalAssets,debts:totalDebts}];
+  const note=prompt('Optional note for this snapshot (e.g. "Paid off credit card"):');
+  S.snapshots=[...S.snapshots,{id:Date.now().toString(),date:todayStr(),netWorth:nw,assets:totalAssets,debts:totalDebts,note:note||''}];
   save('snapshots');checkMilestones();renderWorth();
 }
 function delSnapshot(id){S.snapshots=S.snapshots.filter(s=>s.id!==id);save('snapshots');renderSnapshots();}
@@ -3771,6 +3879,7 @@ function renderSnapshots(){
             <div style="font-size:9px;color:var(--mut);letter-spacing:1px;margin-bottom:3px">${MONTHS[d.getMonth()].toUpperCase()} ${d.getDate()}, ${d.getFullYear()}</div>
             <div style="font-size:18px;font-weight:bold;color:${s.netWorth>=0?'var(--grn)':'var(--red)'}">${fmt$(s.netWorth,true)}</div>
             <div style="font-size:9px;color:var(--mut);margin-top:3px">Assets ${fmt$(s.assets)} · Debts ${fmt$(s.debts)}</div>
+            ${s.note?`<div style="font-size:9px;color:var(--acc);margin-top:4px;font-style:italic">"${s.note}"</div>`:''}
           </div>
           <button class="btn-sm btn-red" onclick="delSnapshot('${s.id}')">✕</button>
         </div>
@@ -3919,6 +4028,20 @@ function renderRetirement(){
       <div class="row bold"><span class="rl">Projected Total</span><span class="rr" style="color:var(--acc)">${fmt$(fv)}</span></div>
       ${reqMonthly>0&&reqMonthly>monthly?`<div style="font-size:9px;color:var(--org);margin-top:10px">To hit ${fmt$(target)} in ${f.years}y you need ${fmt$(reqMonthly)}/mo (${fmt$(reqMonthly-monthly)}/mo more)</div>`:''}
     </div>
+
+    <div class="card mt16 bdr-l">
+      <div class="label2 mb10">Growth Scenarios (${f.years||30} Years)</div>
+      ${[3,5,7,9].map(rate2=>{
+        const r2=rate2/100/12,n2=(parseFloat(f.years)||30)*12;
+        const fv2=P*Math.pow(1+r2,n2)+monthly*(Math.pow(1+r2,n2)-1)/r2;
+        const active=parseFloat(f.returnRate)===rate2;
+        return'<div class="flex" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr);opacity:'+(active?'1':'.7')+'">'
+          +'<span style="font-size:11px;color:'+(active?'var(--acc)':'var(--mut)')+';font-weight:'+(active?'bold':'normal')+'">'+rate2+'% annual</span>'
+          +'<span style="font-size:12px;color:'+(fv2>=target?'var(--grn)':'var(--txt)')+'">'+fmt$(fv2)+(fv2>=target?' ✓':'')+'</span>'
+          +'</div>';
+      }).join('')}
+      <div style="font-size:8px;color:var(--mut2);margin-top:8px">3% = conservative bonds · 5% = balanced · 7% = stocks avg · 9% = aggressive growth</div>
+    </div>
   </div>`;
 }
 
@@ -4023,71 +4146,6 @@ function sync401kAsset(balance){
 }
 
 let _401kEditing=false;
-function render401k(){
-  const r=S.retirement401k;
-  const c=calc401k();
-
-  function syncBalance(){
-    const bal=parseFloat(r.accountBalance)||0;
-    if(!bal)return;
-    const existing=S.assets.find(a=>a.label==='401(k)');
-    if(existing){S.assets=S.assets.map(a=>a.label==='401(k)'?{...a,value:String(bal)}:a);}
-    else{S.assets=[...S.assets,{id:'401k-auto',label:'401(k)',value:String(bal),type:'investment'}];}
-    save('assets');
-  }
-
-  content.innerHTML=`<div class="page">
-    <div class="card accent-l mb20">
-      <div class="label2">Annual 401k Picture</div>
-      <div style="font-size:28px;font-weight:bold;color:var(--acc);line-height:1;margin-bottom:12px">${fmt$(c.totalAnnual)}/yr total</div>
-      <div class="flex gap10" style="font-size:10px;flex-wrap:wrap;margin-bottom:10px">
-        <div style="border-left:2px solid var(--grn);padding-left:8px"><div style="color:var(--mut);margin-bottom:2px">Your Contribution</div><div style="color:var(--grn);font-weight:bold">${fmt$(c.empAnnual)}/yr</div><div style="font-size:8px;color:var(--mut)">${fmt$(c.empPerCheck)}/paycheck</div></div>
-        <div style="border-left:2px solid var(--blu);padding-left:8px"><div style="color:var(--mut);margin-bottom:2px">Employer Match</div><div style="color:var(--blu);font-weight:bold">${fmt$(c.matchAnnual)}/yr</div><div style="font-size:8px;color:var(--mut)">${fmt$(c.matchPerCheck)}/paycheck</div></div>
-        ${c.preTaxSaving>0?`<div style="border-left:2px solid var(--acc);padding-left:8px"><div style="color:var(--mut);margin-bottom:2px">Tax Savings</div><div style="color:var(--acc);font-weight:bold">${fmt$(c.preTaxSaving)}/yr</div><div style="font-size:8px;color:var(--mut)">pre-tax</div></div>`:''}
-      </div>
-      ${c.balance>0?`<div class="row"><span class="rl">Account Balance</span><span class="rr" style="color:var(--acc);font-weight:bold">${fmt$(c.balance)}</span></div>`:''}
-      ${c.empPct>0&&c.empPct<parseFloat(r.matchUpTo||0)?`<div style="font-size:9px;color:var(--org);margin-top:8px;padding:6px;background:var(--orgd)">Contribute ${(parseFloat(r.matchUpTo||0)-c.empPct).toFixed(1)}% more to capture full employer match (+${fmt$(c.matchAnnual*(parseFloat(r.matchUpTo||0)/c.empPct-1))}/yr free money)</div>`:c.empPct>0?`<div style="font-size:9px;color:var(--grn);margin-top:8px">Getting full employer match</div>`:''}
-    </div>
-
-    <div class="card mb16">
-      <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="label" style="margin:0">Settings</div>
-        <button class="btn-ghost btn-sm" onclick="_401kEditing=!_401kEditing;render401k()">${_401kEditing?'Done':'Edit'}</button>
-      </div>
-      ${_401kEditing?`
-      <div class="mb12"><div class="label2">Account Balance</div>
-        <div class="inp-row"><span class="pre">$</span><input type="number" min="0" step="100" placeholder="0" value="${r.accountBalance}" onblur="S.retirement401k.accountBalance=this.value;save('retirement401k');syncBalance();render401k()" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div>
-        <div style="font-size:9px;color:var(--mut);margin-top:4px">Auto-syncs to Net Worth as an investment asset</div>
-      </div>
-      <div class="mb12"><div class="label2">Contribution Type</div>
-        <div class="flex gap8">${[['pretax','Pre-Tax (Traditional)'],['roth','Roth']].map(([v,l])=>`<button style="flex:1;padding:8px;border:1px solid ${r.rothOrPretax===v?'var(--acc)':'var(--bdr)'};background:${r.rothOrPretax===v?'var(--accd)':'transparent'};color:${r.rothOrPretax===v?'var(--acc)':'var(--mut)'};font-size:9px" onclick="S.retirement401k.rothOrPretax='${v}';save('retirement401k');render401k()">${l}</button>`).join('')}</div>
-      </div>
-      <div class="mb12"><div class="label2">Your Contribution</div>
-        <div class="flex gap8 mb8">${[['percent','% of Gross'],['flat','$ per Paycheck']].map(([v,l])=>`<button style="flex:1;padding:7px;border:1px solid ${r.employeeType===v?'var(--acc)':'var(--bdr)'};background:${r.employeeType===v?'var(--accd)':'transparent'};color:${r.employeeType===v?'var(--acc)':'var(--mut)'};font-size:9px" onclick="S.retirement401k.employeeType='${v}';save('retirement401k');render401k()">${l}</button>`).join('')}</div>
-        <div class="inp-row"><span class="pre">${r.employeeType==='percent'?'%':'$'}</span><input type="number" min="0" step="${r.employeeType==='percent'?'0.5':'10'}" placeholder="${r.employeeType==='percent'?'6':'100'}" value="${r.employeeAmount}" onblur="S.retirement401k.employeeAmount=this.value;save('retirement401k');render401k()" style="border:none;background:transparent;font-size:18px;padding:8px 4px">${r.employeeType==='percent'&&c.annualGross>0?`<span style="padding:0 10px;color:var(--mut);font-size:9px">${fmt$(c.annualGross*(parseFloat(r.employeeAmount)||0)/100)}/yr</span>`:''}</div>
-      </div>
-      <div class="mb10"><div class="label2">Employer Match Formula</div>
-        <div style="font-size:9px;color:var(--mut);margin-bottom:8px">e.g. 100% match up to 3% of salary</div>
-        <div class="flex gap8">
-          <div class="f1"><div class="label2">Match %</div><div class="inp-row"><input type="number" min="0" step="25" placeholder="100" value="${r.matchFormula}" onblur="S.retirement401k.matchFormula=this.value;save('retirement401k');render401k()" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 8px;color:var(--mut)">%</span></div></div>
-          <div class="f1"><div class="label2">Up to % of Salary</div><div class="inp-row"><input type="number" min="0" step="0.5" placeholder="3" value="${r.matchUpTo}" onblur="S.retirement401k.matchUpTo=this.value;save('retirement401k');render401k()" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 8px;color:var(--mut)">%</span></div></div>
-        </div>
-      </div>`:`
-      <div class="row"><span class="rl">Type</span><span class="rr">${r.rothOrPretax==='pretax'?'Pre-Tax':'Roth'}</span></div>
-      <div class="row"><span class="rl">Your Contribution</span><span class="rr">${r.employeeType==='percent'?(r.employeeAmount||'0')+'% of gross':fmt$(r.employeeAmount||0)+'/paycheck'}</span></div>
-      <div class="row"><span class="rl">Employer Match</span><span class="rr">${r.matchFormula||0}% up to ${r.matchUpTo||0}% of salary</span></div>
-      <div class="row"><span class="rl">Account Balance</span><span class="rr">${r.accountBalance?fmt$(r.accountBalance):'Not set'}</span></div>`}
-    </div>
-
-    ${!_401kEditing&&c.empPerCheck>0?`<div class="card bdr-l">
-      <div class="label2 mb8">Per-Paycheck (Biweekly)</div>
-      <div class="row"><span class="rl">Gross per Paycheck</span><span class="rr">${fmt$(c.grossPerCheck)}</span></div>
-      <div class="row"><span class="rl">Your Contribution</span><span class="rr" style="color:var(--grn)">-${fmt$(c.empPerCheck)}</span></div>
-      <div class="row"><span class="rl">Employer Adds</span><span class="rr" style="color:var(--blu)">+${fmt$(c.matchPerCheck)}</span></div>
-      <div class="row bold"><span class="rl">Total Into 401k</span><span class="rr" style="color:var(--acc)">${fmt$(c.empPerCheck+c.matchPerCheck)}</span></div>
-    </div>`:''}
-  </div>`;
-}
 
 // SIDE INCOME
 let _showSIForm=false,_siForm={label:'',amount:'',frequency:'one-time',date:'',note:''};
@@ -4140,43 +4198,8 @@ function renderIncomeTab(){
   </div>`;
 }
 
-function renderSideIncome(){
-  const now=new Date(),yr=now.getFullYear();
-  const ytdSI=S.sideIncome.filter(s=>s.frequency==='one-time'&&s.date&&parseLocal(s.date).getFullYear()===yr).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
-  const recurringMonthly=S.sideIncome.filter(s=>s.frequency!=='one-time').reduce((t,s)=>t+toMonthly({amount:s.amount,frequency:s.frequency}),0);
-  const sorted=[...S.sideIncome].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-
-  content.innerHTML=`<div class="page">
-    <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="label" style="margin:0">Side Income</div>
-      <button class="btn-acc btn-sm" onclick="_showSIForm=!_showSIForm;renderSideIncome()">+ Add</button>
-    </div>
-    ${ytdSI>0||recurringMonthly>0?`<div class="stat-row mb20">
-      ${ytdSI>0?`<div class="stat-box" style="border-left:2px solid var(--grn)"><div class="sl">${yr} YTD</div><div class="sv" style="color:var(--grn)">${fmt$(ytdSI)}</div></div>`:''}
-      ${recurringMonthly>0?`<div class="stat-box" style="border-left:2px solid var(--acc)"><div class="sl">Recurring/mo</div><div class="sv" style="color:var(--acc)">${fmt$(recurringMonthly)}</div></div>`:''}
-    </div>`:''}
-    ${_showSIForm?`<div class="inline-form mb14">
-      <div class="label">New Side Income</div>
-      <input id="si-label" placeholder="e.g. Freelance, Gig, Tips" style="margin-bottom:10px">
-      <div class="flex gap8 mb10">
-        <div class="f1"><div class="label2">Amount</div><div class="inp-row"><span class="pre">$</span><input id="si-amt" type="number" min="0" step="1" placeholder="0" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
-        <div class="f1"><div class="label2">Frequency</div><select id="si-freq">${[['one-time','One-Time'],['weekly','Weekly'],['biweekly','Bi-Weekly'],['monthly','Monthly']].map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
-      </div>
-      <div class="flex gap8 mb10">
-        <div class="f1"><div class="label2">Date</div><input id="si-date" type="date"></div>
-        <div class="f1"><div class="label2">Note</div><input id="si-note" placeholder="Optional"></div>
-      </div>
-      <div class="flex gap8"><button class="btn-acc f1" onclick="saveSideIncome()">Add</button><button class="btn-ghost" onclick="_showSIForm=false;renderSideIncome()">Cancel</button></div>
-    </div>`:''}
-    ${sorted.length===0&&!_showSIForm?`<div style="text-align:center;padding:40px 0;color:var(--mut);font-size:9px;letter-spacing:2px">Track freelance, gig, tips, or any income outside your main job</div>`:''}
-    ${sorted.map(s=>`<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:12px 14px;background:var(--surf);margin-bottom:8px;border-left:2px solid var(--grn)">
-      <div><div style="font-size:13px;margin-bottom:2px">${s.label}</div>
-      <div style="font-size:9px;color:var(--mut)">${s.frequency==='one-time'?'One-Time':s.frequency}${s.date?' · '+s.date:''}${s.note?' · '+s.note:''}</div></div>
-      <div style="text-align:right"><div style="font-size:15px;font-weight:bold;color:var(--grn)">${fmt$(s.amount)}</div>
-      <button class="btn-sm btn-red" onclick="delSideIncome('${s.id}')">Remove</button></div>
-    </div>`).join('')}
-  </div>`;
-}
+// renderSideIncome consolidated — redirect to renderIncomeTab
+function renderSideIncome(){renderIncomeTab();}
 function saveSideIncome(){
   const l=document.getElementById('si-label')?.value,a=document.getElementById('si-amt')?.value;
   if(!l||!a)return;
@@ -4344,6 +4367,10 @@ const TX_CAT_KEYWORDS={
 
 function autoCategorizeTx(desc){
   const d=(desc||'').toLowerCase();
+  // Check user-defined rules first
+  for(const rule of S.autoCatRules){
+    if(d.includes((rule.keyword||'').toLowerCase()))return rule.category;
+  }
   for(const[cat,kws]of Object.entries(TX_CAT_KEYWORDS)){
     if(kws.some(k=>d.includes(k)))return cat;
   }
@@ -4511,6 +4538,21 @@ function renderTransactions(){
           }).join('');
         })()}
       </div>`:''}
+
+      <!-- Auto-Categorization Rules -->
+      <div class="card bdr-l mb14">
+        <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div class="label" style="margin:0">Auto-Category Rules</div>
+          <button class="btn-ghost btn-sm" onclick="addAutoCatRule()">+ Rule</button>
+        </div>
+        <div style="font-size:9px;color:var(--mut);margin-bottom:10px">Keyword matches in transaction descriptions auto-assign categories during import.</div>
+        ${S.autoCatRules.map((r,i)=>{
+          const cat=catById[r.category]||CATS[CATS.length-1];
+          return'<div class="flex" style="justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bdr)">'
+            +'<span style="font-size:11px">"'+r.keyword+'" → <span style="color:'+cat.color+'">'+cat.icon+' '+cat.label+'</span></span>'
+            +'<button class="btn-sm btn-red" onclick="S.autoCatRules.splice('+i+',1);save(\'autoCatRules\');renderTransactions()">✕</button></div>';
+        }).join('')}
+      </div>
     </div>`;
     return;
   }
@@ -4752,11 +4794,26 @@ function importTxns(){
 
 function delTx(id){S.transactions=S.transactions.filter(t=>t.id!==id);save('transactions');renderTransactions();}
 
+function addAutoCatRule(){
+  const keyword=prompt('Keyword to match in description (e.g. "Starbucks"):');
+  if(!keyword)return;
+  const catLabels=CATS.map((c,i)=>i+': '+c.label).join(', ');
+  const catIdx=parseInt(prompt('Category number:\n'+catLabels));
+  if(isNaN(catIdx)||catIdx<0||catIdx>=CATS.length)return;
+  S.autoCatRules=[...S.autoCatRules,{id:Date.now().toString(),keyword,category:CATS[catIdx].id}];
+  save('autoCatRules');renderTransactions();
+}
+
 // ─── Data Panel ───────────────────────────────────────────────────────────────
 function toggleDataPanel(){document.getElementById('data-panel').classList.toggle('open');}
 function closeDataPanel(){document.getElementById('data-panel').classList.remove('open');}
 function exportJSON(){
-  const bundle={schedule:S.schedule,deductions:S.deductions,log:S.log,customShifts:S.customShifts,paychecks:S.paychecks,expenses:S.expenses,goals:S.goals,debts:S.debts,exportedAt:new Date().toISOString()};
+  const bundle={schedule:S.schedule,deductions:S.deductions,log:S.log,customShifts:S.customShifts,paychecks:S.paychecks,expenses:S.expenses,goals:S.goals,debts:S.debts,
+    envelopes:S.envelopes,assets:S.assets,snapshots:S.snapshots,milestones:S.milestones,
+    retirement401k:S.retirement401k,sideIncome:S.sideIncome,savingsChallenge:S.savingsChallenge,
+    transactions:S.transactions,taxRate:S.taxRate,earlyDepositDays:S.earlyDepositDays,
+    incomeSafetyThresholds:S.incomeSafetyThresholds,autoCatRules:S.autoCatRules,
+    exportedAt:new Date().toISOString()};
   const json=JSON.stringify(bundle,null,2);
   if(navigator.clipboard)navigator.clipboard.writeText(json).catch(()=>{});
   document.getElementById('import-ta').value=json;
@@ -4789,6 +4846,18 @@ function importJSON(){
     if(bundle.expenses){S.expenses=bundle.expenses;lsSet('budget_expenses_v1',S.expenses);}
     if(bundle.goals){S.goals=bundle.goals;lsSet('budget_goals_v1',S.goals);}
     if(bundle.debts){S.debts=bundle.debts;lsSet('budget_debts_v1',S.debts);}
+    if(bundle.envelopes){S.envelopes=bundle.envelopes;lsSet('envelopes_v1',S.envelopes);}
+    if(bundle.assets){S.assets=bundle.assets;lsSet('assets_v1',S.assets);}
+    if(bundle.snapshots){S.snapshots=bundle.snapshots;lsSet('snapshots_v1',S.snapshots);}
+    if(bundle.milestones){S.milestones=bundle.milestones;lsSet('milestones_v1',S.milestones);}
+    if(bundle.retirement401k){S.retirement401k={...S.retirement401k,...bundle.retirement401k};lsSet('ret401k_v1',S.retirement401k);}
+    if(bundle.sideIncome){S.sideIncome=bundle.sideIncome;lsSet('side_income_v1',S.sideIncome);}
+    if(bundle.savingsChallenge){S.savingsChallenge=bundle.savingsChallenge;lsSet('savings_challenge_v1',S.savingsChallenge);}
+    if(bundle.transactions){S.transactions=bundle.transactions;lsSet('transactions_v1',S.transactions);}
+    if(bundle.taxRate!=null){S.taxRate=bundle.taxRate;lsSet('tax_rate_v1',S.taxRate);}
+    if(bundle.earlyDepositDays!=null){S.earlyDepositDays=bundle.earlyDepositDays;lsSet('early_deposit_v1',S.earlyDepositDays);}
+    if(bundle.incomeSafetyThresholds){S.incomeSafetyThresholds=bundle.incomeSafetyThresholds;lsSet('income_thresholds_v1',S.incomeSafetyThresholds);}
+    if(bundle.autoCatRules){S.autoCatRules=bundle.autoCatRules;lsSet('auto_cat_rules_v1',S.autoCatRules);}
     showToast(true);closeDataPanel();render();
   }catch(e){alert('Import failed — make sure you pasted valid JSON.');}
 }
