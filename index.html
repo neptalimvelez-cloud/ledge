@@ -64,14 +64,19 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
-html,body{
-  height:100%;
+html{
+  height: -webkit-fill-available;
+  height: 100%;
+}
+body{
+  height: -webkit-fill-available;
+  height: 100%;
   background:var(--bg);
   overflow:hidden;
   font-family:'DM Sans',system-ui,-apple-system,sans-serif;
   color:var(--txt);
+  position:fixed;top:0;left:0;right:0;bottom:0;width:100%;
 }
-body{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;}
 
 /* Animated background — slow shifting nebula */
 body::before{
@@ -91,6 +96,7 @@ body::before{
   display:flex;align-items:stretch;justify-content:center;
   background:transparent;
   z-index:1;
+  min-height:-webkit-fill-available;
 }
 
 #app{
@@ -100,6 +106,7 @@ body::before{
   transform:translateX(-50%);
   width:100%;max-width:560px;
   bottom:0;
+  min-height:-webkit-fill-available;
   overflow:hidden;
   padding-top:env(safe-area-inset-top,0px);
 }
