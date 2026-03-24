@@ -23,10 +23,10 @@
   --safe-bot:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);overflow:hidden;font-family:'Courier New',Courier,monospace;color:var(--txt)}
-body{position:fixed;width:100%}
+html,body{height:100%;height:-webkit-fill-available;background:var(--bg);overflow:hidden;font-family:'Courier New',Courier,monospace;color:var(--txt)}
+body{position:fixed;width:100%;height:100%;height:-webkit-fill-available}
 #app-outer{position:fixed;inset:0;display:flex;align-items:stretch;justify-content:center;background:#000}
-#app{display:flex;flex-direction:column;height:100dvh;width:100%;max-width:560px;border-radius:0;overflow:hidden;position:relative;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+#app{display:flex;flex-direction:column;height:100%;height:-webkit-fill-available;width:100%;max-width:560px;overflow:hidden;position:relative;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 #app-switch{display:flex;background:var(--surf);border-bottom:1px solid var(--bdr);flex-shrink:0}
 #app-switch button{flex:1;padding:10px 4px 8px;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit}
 #app-switch button .sw-icon{font-size:15px;color:var(--mut)}
@@ -1275,6 +1275,7 @@ function renderHistoryTab(rate){
     // YTD
     const moRows=Array.from({length:12},(_,m)=>m).filter(m=>ytdSecs[m]||m<=now.getMonth()).map(m=>{
       const sec=ytdSecs[m]||0;
+      const cmG=S.customShifts.filter(cs=>{const d=parseLocal(cs.date);return d.getFullYear()===ytdYr&&d.getMonth()===m;}).reduce((s,c)=>s+csGross(c),0);
       const g=ytdGrossByMo[m]||0,n=applyDed(g,S.deductions),isCur=m===now.getMonth(),isPast=m<now.getMonth();
       return`<div class="flex" style="align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surf);margin-bottom:6px;border-left:2px solid ${isCur?'var(--acc)':isPast&&g>0?'var(--accd)':'var(--bdr)'};opacity:${!isPast&&!isCur?.4:1}">
         <div>
@@ -1757,7 +1758,10 @@ function getBudgetIncome(){
   const sch=S.schedule;
   let hrs=0;for(const sh of Object.values(sch.shifts)){if(!sh.active)continue;const sm=toMin(sh.start),em=toMin(sh.end),dur=em<sm?em+1440-sm:em-sm;hrs+=dur/60;}
   const wGross=hrs*rate,wNet=applyDed(wGross,S.deductions);
-  return{wGross,wNet,mGross:wGross*52/12,mNet:wNet*52/12,connected:!!rate};
+  // Add recurring side income to weekly/monthly projections
+  const siWeekly=S.sideIncome.filter(s=>s.frequency!=='one-time').reduce((t,s)=>t+toWeekly({amount:s.amount,frequency:s.frequency}),0);
+  const siMonthly=S.sideIncome.filter(s=>s.frequency!=='one-time').reduce((t,s)=>t+toMonthly({amount:s.amount,frequency:s.frequency}),0);
+  return{wGross,wNet:wNet+siWeekly,mGross:wGross*52/12,mNet:wNet*52/12+siMonthly,connected:!!rate};
 }
 
 // Fix 1: actual spending from imported transactions for a date range
@@ -1773,6 +1777,19 @@ function getTxSpendingByCategory(fromDate,toDate){
     .filter(t=>{const d=parseLocal(t.date);return d>=fromDate&&d<=toDate&&(t.amount<0||(t.type&&(t.type.toLowerCase()==='purchase'||t.type.toLowerCase()==='direct debit')));})
     .forEach(t=>{const c=t.category||'custom';byCat[c]=(byCat[c]||0)+Math.abs(parseFloat(t.amount)||0);});
   return byCat;
+}
+// Get imported deposit income for a date range (positive-amount transactions)
+function getTxIncome(fromDate,toDate){
+  return S.transactions
+    .filter(t=>{
+      if(!t.date)return false;
+      const d=parseLocal(t.date);
+      if(d<fromDate||d>toDate)return false;
+      const amt=parseFloat(t.amount)||0;
+      const type=(t.type||'').toLowerCase();
+      return amt>0&&(type==='deposit'||type==='direct deposit'||type==='cash bonus'||type==='');
+    })
+    .reduce((s,t)=>s+(parseFloat(t.amount)||0),0);
 }
 
 
@@ -1822,28 +1839,53 @@ function renderBudgetOverview(){
   for(const[,dm]of Object.entries(S.log)){for(const[dk,sec]of Object.entries(dm)){const d=parseLocal(dk);if(d.getFullYear()===yr)ytdG+=calcEarnings(sec,rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier);}}
   const ytdNet=applyDed(ytdG,S.deductions);
 
-  // This week actual expenses (scheduled + imported transactions)
+  // This week actual — include live shift seconds not yet saved
   const wkK=wkKey(now),thisWkLog=(S.log[wkK]||{}),wkSec=Object.values(thisWkLog).reduce((a,b)=>a+b,0);
-  const wkActGross=calcEarnings(wkSec,rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier);
-  // Also add live shift earnings
-  const liveAdd=getLiveEarned();
-  const wkActNet=applyDed(wkActGross,S.deductions)+liveAdd;
+  // Get live shift net seconds (already computed in getLiveEarned internals)
+  const _liveShift=(()=>{
+    const shift=getActiveShift(now);if(!shift)return{sec:0,wk:null};
+    const p=S.pause;
+    let ls=p.paused&&p.pausedAt!=null?p.pausedAt:secsIntoShift(now,toMin(shift.shift.start));
+    const brkL=p.onBreak&&p.breakStart?Math.floor((now-p.breakStart)/1000):0;
+    return{sec:Math.max(0,ls-(p.accBreakSec+brkL)),wk:localStr(getWeekStart(shift.date,S.schedule.weekStartDay,S.schedule.weekStartTime))};
+  })();
+  const liveSecThisWk=_liveShift.wk===wkK?_liveShift.sec:0;
+  const wkActGross=calcEarnings(wkSec+liveSecThisWk,rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier);
+  const wkActNet=applyDed(wkActGross,S.deductions);
+  // Add side income for this week
+  const wkStart2=getWeekStart(now,S.schedule.weekStartDay,S.schedule.weekStartTime);
+  const wkEnd2=wkEnd(wkStart2);
+  const siWk=S.sideIncome.filter(s=>{
+    if(s.frequency==='one-time')return s.date&&(()=>{const d=parseLocal(s.date);return d>=wkStart2&&d<=wkEnd2;})();
+    return false;
+  }).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
+  const txIncW=getTxIncome(wkStart2,wkEnd2);
+  const wkActNetFinal=wkActNet+siWk+txIncW;
   // Actual spending from transactions this week
   const wsStart=ws,wsEnd=new Date(ws);wsEnd.setDate(wsEnd.getDate()+6);wsEnd.setHours(23,59,59,999);
   const txSpendW=getTxSpending(wsStart,wsEnd);
-  const actualExpW=Math.max(recW+otW,txSpendW); // use whichever is higher (scheduled vs actual)
-  const wActBal=wkActNet-actualExpW;
+  const actualExpW=Math.max(recW+otW,txSpendW);
+  const wActBal=wkActNetFinal-actualExpW;
 
   // This month actual from log
   let mActSec=0;
   for(const[,dm]of Object.entries(S.log)){for(const[dk,sec]of Object.entries(dm)){const d=parseLocal(dk);if(d.getFullYear()===yr&&d.getMonth()===now.getMonth())mActSec+=sec;}}
   const mActGross=calcEarnings(mActSec,rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier);
-  const mActNet=applyDed(mActGross,S.deductions);
-  // Actual monthly spending from transactions
+  // Add custom shifts for this month
+  const mActCsG=S.customShifts.filter(cs=>{const d=parseLocal(cs.date);return d.getFullYear()===yr&&d.getMonth()===now.getMonth();}).reduce((s,c)=>s+csGross(c),0);
+  const mActNet=applyDed(mActGross+mActCsG,S.deductions);
+  // Add one-time side income this month + imported deposits
   const moStart=new Date(yr,now.getMonth(),1),moEnd=new Date(yr,now.getMonth()+1,0,23,59,59,999);
+  const siMo=S.sideIncome.filter(s=>{
+    if(s.frequency==='one-time')return s.date&&(()=>{const d=parseLocal(s.date);return d>=moStart&&d<=moEnd;})();
+    return false;
+  }).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
+  const txIncM=getTxIncome(moStart,moEnd);
+  const mActNetFinal=mActNet+siMo+txIncM;
+  // Actual monthly spending from transactions
   const txSpendM=getTxSpending(moStart,moEnd);
   const actualExpM=Math.max(recM+otM,txSpendM);
-  const mActBal=mActNet-actualExpM;
+  const mActBal=mActNetFinal-actualExpM;
 
   // Savings rate
   const savingsM=activeExp.filter(e=>e.category==='savings'&&e.frequency!=='one-time').reduce((s,e)=>s+toMonthly(e),0);
@@ -1896,8 +1938,8 @@ function renderBudgetOverview(){
       <div class="right"><div class="label2">Actual This Week</div><div style="font-size:16px;font-weight:bold;color:var(--grn)">${fmt$(wkActNet)}</div></div>
     </div>`:''}
     ${txNote}
-    ${balCard(wBal,'This Week',wNet,recW,otW,connected?'from Pay Ledger':null,wkActNet,wActBal)}
-    ${balCard(mBal,'This Month',mNet,recM,otM,connected?'from Pay Ledger':null,mActNet,mActBal)}
+    ${balCard(wBal,'This Week',wNet,recW,otW,connected?'from Pay Ledger':null,wkActNetFinal,wActBal)}
+    ${balCard(mBal,'This Month',mNet,recM,otM,connected?'from Pay Ledger':null,mActNetFinal,mActBal)}
 
     ${(()=>{
       // 6-month income vs expense trend chart
@@ -1907,8 +1949,20 @@ function renderBudgetOverview(){
         let secs2=0;
         for(const[,dm]of Object.entries(S.log)){for(const[dk,sec]of Object.entries(dm)){const dd=parseLocal(dk);if(dd.getFullYear()===yr2&&dd.getMonth()===mo2)secs2+=sec;}}
         const g2=calcEarnings(secs2,rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier);
-        const n2=applyDed(g2,S.deductions);
-        const expM=S.expenses.filter(e=>e.active!==false).reduce((s,e)=>inMonth(e,yr2,mo2)&&!e.paid?s+expMonthAmt(e,yr2,mo2):s,0);
+        // Add custom shift gross for this month
+        const csG2=S.customShifts.filter(cs=>{const dd=parseLocal(cs.date);return dd.getFullYear()===yr2&&dd.getMonth()===mo2;}).reduce((s,c)=>s+csGross(c),0);
+        // Add side income for this month
+        const siInc=S.sideIncome.filter(s=>{
+          if(s.frequency==='one-time')return s.date&&(()=>{const dd=parseLocal(s.date);return dd.getFullYear()===yr2&&dd.getMonth()===mo2;})();
+          return true;
+        }).reduce((s,si)=>s+(si.frequency==='one-time'?parseFloat(si.amount)||0:toMonthly({amount:si.amount,frequency:si.frequency})),0);
+        const n2=applyDed(g2+csG2,S.deductions)+siInc;
+        // Scheduled expenses
+        const schedExpM=S.expenses.filter(e=>e.active!==false&&!e.archived).reduce((s,e)=>inMonth(e,yr2,mo2)&&!e.paid?s+expMonthAmt(e,yr2,mo2):s,0);
+        // Actual imported transaction spend for this month
+        const moS=new Date(yr2,mo2,1),moE=new Date(yr2,mo2+1,0,23,59,59,999);
+        const txExp=getTxSpending(moS,moE);
+        const expM=Math.max(schedExpM,txExp);
         return{label:MONTHS[mo2],income:n2,expenses:expM,surplus:n2-expM};
       });
       const maxVal=Math.max(...months6.flatMap(m=>[m.income,m.expenses]),1);
@@ -1977,7 +2031,7 @@ function renderBudgetOverview(){
 }
 
 // ─── BUDGET EXPENSES ─────────────────────────────────────────────────────────
-let _expFilter='all',_showExpForm=false,_editExpId=null,_showEnvelopes=true;
+let _expFilter='all',_showExpForm=false,_editExpId=null,_showEnvelopes=false;
 let _expForm={label:'',category:'housing',customCategory:'',amount:'',frequency:'monthly',oneTimeDate:'',dayOfMonth:'',note:''};
 
 function renderBudgetExpenses(){
@@ -2335,37 +2389,72 @@ function renderCalApp(){
 }
 
 function renderBudgetForecastCalOnly(){
-  // Just the calendar view
   const yr=_calYear,mo=_calMonth;
   const firstDay=new Date(yr,mo,1).getDay();
   const daysInMonth=new Date(yr,mo+1,0).getDate();
   const cells=[];
   for(let i=0;i<firstDay;i++)cells.push(null);
   for(let d=1;d<=daysInMonth;d++)cells.push(d);
+
+  // Build expense-by-day: scheduled expenses + imported transaction expenses
   const expByDay={};
-  for(const e of S.expenses.filter(x=>x.active!==false)){
+  for(const e of S.expenses.filter(x=>x.active!==false&&!x.archived)){
     if(e.frequency==='one-time'&&e.oneTimeDate&&!e.paid){
       const d=parseLocal(e.oneTimeDate);
-      if(d.getFullYear()===yr&&d.getMonth()===mo){const day=d.getDate();if(!expByDay[day])expByDay[day]=[];expByDay[day].push(e);}
+      if(d.getFullYear()===yr&&d.getMonth()===mo){const day=d.getDate();if(!expByDay[day])expByDay[day]=[];expByDay[day].push({label:e.label,amount:parseFloat(e.amount)||0,source:'scheduled'});}
     } else if(e.frequency!=='one-time'&&e.dayOfMonth){
-      const dom=parseInt(e.dayOfMonth);if(dom>=1&&dom<=daysInMonth){if(!expByDay[dom])expByDay[dom]=[];expByDay[dom].push(e);}
+      const dom=parseInt(e.dayOfMonth);if(dom>=1&&dom<=daysInMonth){if(!expByDay[dom])expByDay[dom]=[];expByDay[dom].push({label:e.label,amount:parseFloat(e.amount)||0,source:'scheduled'});}
     }
   }
+  // Add imported transaction expenses for this month
+  for(const t of S.transactions){
+    if(!t.date)continue;
+    const d=parseLocal(t.date);
+    if(d.getFullYear()!==yr||d.getMonth()!==mo)continue;
+    const amt=parseFloat(t.amount)||0;
+    const type=(t.type||'').toLowerCase();
+    if(amt<0||(type==='purchase'||type==='direct debit')){
+      const day=d.getDate();
+      if(!expByDay[day])expByDay[day]=[];
+      expByDay[day].push({label:t.description||t.type||'Purchase',amount:Math.abs(amt),source:'imported'});
+    }
+  }
+
+  // Payday markers
   const paydays=new Set();
   const rate=parseFloat(S.schedule.hourlyRate)||0;
   const offset=parseInt(S.earlyDepositDays)||0;
   if(rate){
+    const seenWks=new Set();
     for(let d=1;d<=daysInMonth;d++){
       const dd=new Date(yr,mo,d);
       const ws=getWeekStart(dd,S.schedule.weekStartDay,S.schedule.weekStartTime);
+      const wsKey=localStr(ws);
+      if(seenWks.has(wsKey))continue;
+      seenWks.add(wsKey);
       const we=wkEnd(ws);
       const payDate=new Date(we);payDate.setDate(payDate.getDate()+1-offset);
-      if(payDate.getFullYear()===yr&&payDate.getMonth()===mo&&payDate.getDate()===d)paydays.add(d);
+      // Use actual paycheck date if recorded
+      const pc=S.paychecks[wsKey];
+      const actualPay=pc?.date?parseLocal(pc.date):payDate;
+      if(actualPay.getFullYear()===yr&&actualPay.getMonth()===mo)paydays.add(actualPay.getDate());
     }
   }
+  // Also mark imported deposit dates as income days
+  const incDays=new Set();
+  for(const t of S.transactions){
+    if(!t.date)continue;
+    const d=parseLocal(t.date);
+    if(d.getFullYear()!==yr||d.getMonth()!==mo)continue;
+    const amt=parseFloat(t.amount)||0;
+    const type=(t.type||'').toLowerCase();
+    if(amt>0&&(type==='deposit'||type==='direct deposit'||type==='cash bonus'))incDays.add(d.getDate());
+  }
+
   const debtDays=new Set(S.debts.filter(d=>d.dayOfMonth).map(d=>parseInt(d.dayOfMonth)));
   const savingsDays=new Set(S.expenses.filter(e=>e.category==='savings'&&e.dayOfMonth&&e.active!==false).map(e=>parseInt(e.dayOfMonth)));
   const today=new Date(),isNow=today.getFullYear()===yr&&today.getMonth()===mo;
+
   const legend=S.calLegendHidden?'':
     `<div class="cal-legend">
       <div style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -2389,31 +2478,34 @@ function renderBudgetForecastCalOnly(){
       <button class="btn-ghost btn-sm" onclick="calNext();renderCalApp()">→</button>
     </div>
     <div class="cal-grid" style="margin-bottom:4px">${['S','M','T','W','T','F','S'].map(d=>`<div style="text-align:center;font-size:8px;color:var(--mut);padding:4px 0">${d}</div>`).join('')}</div>
-    <div class="cal-grid">${cells.map((day,i)=>{
+    <div class="cal-grid">${cells.map((day)=>{
       if(!day)return'<div></div>';
       const dayExps=expByDay[day]||[];
-      const total=dayExps.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+      const total=dayExps.reduce((s,e)=>s+e.amount,0);
+      const hasImported=dayExps.some(e=>e.source==='imported');
       const isToday=isNow&&today.getDate()===day;
       const isPay=paydays.has(day);
+      const isInc=incDays.has(day);
       const isDebt=debtDays.has(day);
       const isSav=savingsDays.has(day);
-      const typeCount=[dayExps.length>0,isPay,isDebt,isSav].filter(Boolean).length;
+      const typeCount=[dayExps.length>0,isPay||isInc,isDebt,isSav].filter(Boolean).length;
       let cls='cal-cell';
       if(isToday)cls+=' today';
       else if(typeCount>1)cls+=' cal-multi';
       else if(dayExps.length)cls+=' cal-expense';
-      else if(isPay)cls+=' cal-payday';
+      else if(isPay||isInc)cls+=' cal-payday';
       else if(isDebt)cls+=' cal-debt';
       else if(isSav)cls+=' cal-savings';
       return`<div class="${cls}">
-        <div class="cal-day-num">${day}${isPay?'<span style="color:var(--blu);font-size:6px"> $</span>':''}</div>
-        ${dayExps.length?`<div class="cal-lbl">${dayExps[0].label.slice(0,8)}</div><div class="cal-amt">-$${total.toFixed(0)}</div>`:isDebt?'<div class="cal-lbl" style="color:var(--org)">debt</div>':''}
+        <div class="cal-day-num">${day}${(isPay||isInc)?'<span style="color:var(--blu);font-size:6px"> $</span>':''}</div>
+        ${dayExps.length?`<div class="cal-lbl">${dayExps[0].label.slice(0,8)}${hasImported?'*':''}</div><div class="cal-amt">-$${total.toFixed(0)}</div>`:isDebt?'<div class="cal-lbl" style="color:var(--org)">debt</div>':''}
       </div>`;
     }).join('')}</div>
-    ${S.expenses.filter(e=>e.frequency!=='one-time'&&e.active!==false).length?`<div class="card mt16 bdr-l">
+    ${S.expenses.filter(e=>e.frequency!=='one-time'&&e.active!==false&&!e.archived).length?`<div class="card mt16 bdr-l">
       <div class="label2 mb8">Recurring This Month</div>
-      ${S.expenses.filter(e=>e.frequency!=='one-time'&&e.active!==false).map(e=>{const cat=catById[e.category]||CATS[CATS.length-1];return`<div class="row"><span class="rl"><span style="color:${cat.color}">${cat.icon} </span>${e.label}${e.dayOfMonth?` (day ${e.dayOfMonth})`:''}</span><span class="rr" style="color:var(--red)">-${fmt$(toMonthly(e))}</span></div>`;}).join('')}
+      ${S.expenses.filter(e=>e.frequency!=='one-time'&&e.active!==false&&!e.archived).map(e=>{const cat=catById[e.category]||CATS[CATS.length-1];return`<div class="row"><span class="rl"><span style="color:${cat.color}">${cat.icon} </span>${e.label}${e.dayOfMonth?` (day ${e.dayOfMonth})`:''}</span><span class="rr" style="color:var(--red)">-${fmt$(toMonthly(e))}</span></div>`;}).join('')}
     </div>`:''}
+    ${S.transactions.filter(t=>{if(!t.date)return false;const d=parseLocal(t.date);return d.getFullYear()===yr&&d.getMonth()===mo&&(parseFloat(t.amount)||0)<0;}).length?`<div style="font-size:8px;color:var(--mut2);margin-top:8px">* includes imported transactions</div>`:''}
   </div>`;
 }
 
