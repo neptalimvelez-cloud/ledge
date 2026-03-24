@@ -23,10 +23,10 @@
   --safe-bot:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;height:-webkit-fill-available;background:var(--bg);overflow:hidden;font-family:'Courier New',Courier,monospace;color:var(--txt)}
-body{position:fixed;width:100%;height:100%;height:-webkit-fill-available}
+html,body{height:100%;background:var(--bg);overflow:hidden;font-family:'Courier New',Courier,monospace;color:var(--txt)}
+body{position:fixed;inset:0;width:100%}
 #app-outer{position:fixed;inset:0;display:flex;align-items:stretch;justify-content:center;background:#000}
-#app{display:flex;flex-direction:column;height:100%;height:-webkit-fill-available;width:100%;max-width:560px;overflow:hidden;position:relative;padding-top:env(safe-area-inset-top,0px)}
+#app{display:flex;flex-direction:column;position:absolute;inset:0;width:100%;max-width:560px;left:50%;transform:translateX(-50%);overflow:hidden;padding-top:env(safe-area-inset-top,0px)}
 #app-switch{display:flex;background:var(--surf);border-bottom:1px solid var(--bdr);flex-shrink:0}
 #app-switch button{flex:1;padding:10px 4px 8px;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit}
 #app-switch button .sw-icon{font-size:15px;color:var(--mut)}
@@ -1843,11 +1843,14 @@ function renderBudgetOverview(){
   const otM=activeExp.filter(e=>e.frequency==='one-time'&&!e.paid&&inMonth(e,now.getFullYear(),now.getMonth())).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
   const wBal=wNet-(recW+otW),mBal=mNet-(recM+otM);
 
-  // YTD from log
+  // YTD from log + custom shifts + imported income
   const yr=now.getFullYear(),rate=parseFloat(S.schedule.hourlyRate)||0;
   let ytdG=0;
   for(const[,dm]of Object.entries(S.log)){for(const[dk,sec]of Object.entries(dm)){const d=parseLocal(dk);if(d.getFullYear()===yr)ytdG+=calcEarnings(sec,rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier);}}
-  const ytdNet=applyDed(ytdG,S.deductions);
+  const ytdCsGross=S.customShifts.filter(cs=>parseLocal(cs.date).getFullYear()===yr).reduce((s,c)=>s+csGross(c),0);
+  const ytdSideInc=S.sideIncome.filter(s=>s.date&&parseLocal(s.date).getFullYear()===yr&&s.frequency==='one-time').reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
+  const ytdTxInc=getTxIncome(new Date(yr,0,1),new Date(yr,11,31,23,59,59,999));
+  const ytdNet=applyDed(ytdG+ytdCsGross,S.deductions)+ytdSideInc+ytdTxInc;
 
   // This week actual — include live shift seconds not yet saved
   const wkK=wkKey(now),thisWkLog=(S.log[wkK]||{}),wkSec=Object.values(thisWkLog).reduce((a,b)=>a+b,0);
@@ -1945,8 +1948,8 @@ function renderBudgetOverview(){
 
   content.innerHTML=`<div class="page">
     ${connected&&ytdG>0?`<div class="card" style="display:flex;justify-content:space-between;align-items:center;border-left:3px solid var(--acc);margin-bottom:20px">
-      <div><div class="label2">${yr} YTD from Pay Ledger</div><div style="font-size:22px;font-weight:bold;color:var(--acc)">${fmt$(ytdNet)} net</div><div style="font-size:9px;color:var(--mut);margin-top:3px">gross ${fmt$(ytdG)}</div></div>
-      <div class="right"><div class="label2">Actual This Week</div><div style="font-size:16px;font-weight:bold;color:var(--grn)">${fmt$(wkActNet)}</div></div>
+      <div><div class="label2">${yr} YTD</div><div style="font-size:22px;font-weight:bold;color:var(--acc)">${fmt$(ytdNet)} net</div><div style="font-size:9px;color:var(--mut);margin-top:3px">wages + income${ytdTxInc>0?` · ${fmt$(ytdTxInc)} imported`:''}</div></div>
+      <div class="right"><div class="label2">Actual This Week</div><div style="font-size:16px;font-weight:bold;color:var(--grn)">${fmt$(wkActNetFinal)}</div></div>
     </div>`:''}
     ${txNote}
     ${balCard(wBal,'This Week',wNet,recW,otW,connected?'from Pay Ledger':null,wkActNetFinal,wActBal)}
@@ -1967,12 +1970,14 @@ function renderBudgetOverview(){
           if(s.frequency==='one-time')return s.date&&(()=>{const dd=parseLocal(s.date);return dd.getFullYear()===yr2&&dd.getMonth()===mo2;})();
           return true;
         }).reduce((s,si)=>s+(si.frequency==='one-time'?parseFloat(si.amount)||0:toMonthly({amount:si.amount,frequency:si.frequency})),0);
-        const n2=applyDed(g2+csG2,S.deductions)+siInc;
+        // Add imported deposit income for this month
+        const moS2=new Date(yr2,mo2,1),moE2=new Date(yr2,mo2+1,0,23,59,59,999);
+        const txInc2=getTxIncome(moS2,moE2);
+        const n2=applyDed(g2+csG2,S.deductions)+siInc+txInc2;
         // Scheduled expenses
         const schedExpM=S.expenses.filter(e=>e.active!==false&&!e.archived).reduce((s,e)=>inMonth(e,yr2,mo2)&&!e.paid?s+expMonthAmt(e,yr2,mo2):s,0);
         // Actual imported transaction spend for this month
-        const moS=new Date(yr2,mo2,1),moE=new Date(yr2,mo2+1,0,23,59,59,999);
-        const txExp=getTxSpending(moS,moE);
+        const txExp=getTxSpending(moS2,moE2);
         const expM=Math.max(schedExpM,txExp);
         return{label:MONTHS[mo2],income:n2,expenses:expM,surplus:n2-expM};
       });
@@ -2223,16 +2228,30 @@ function renderBudgetForecast(){
   // Recurring monthly total (for any week/month without day-of-month specifics)
   const recM=activeExp.filter(e=>e.frequency!=='one-time').reduce((s,e)=>s+toMonthly(e),0);
 
+  // Actual income helpers for current period
+  const curWkStart=getWeekStart(now,S.schedule.weekStartDay,S.schedule.weekStartTime);
+  const curWkEnd=wkEnd(curWkStart);
+  const curMoStart=new Date(now.getFullYear(),now.getMonth(),1);
+  const curMoEnd=new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59,999);
+  const txIncCurWk=getTxIncome(curWkStart,curWkEnd);
+  const txIncCurMo=getTxIncome(curMoStart,curMoEnd);
+  const siCurWk=S.sideIncome.filter(s=>s.frequency==='one-time'&&s.date&&(()=>{const d=parseLocal(s.date);return d>=curWkStart&&d<=curWkEnd;})()).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
+  const siCurMo=S.sideIncome.filter(s=>s.frequency==='one-time'&&s.date&&(()=>{const d=parseLocal(s.date);return d>=curMoStart&&d<=curMoEnd;})()).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
+  // Effective income: scheduled + any imported/side income boost for current period
+  const wNetEff=wNet+txIncCurWk+siCurWk;
+  const mNetEff=mNet+txIncCurMo+siCurMo;
+
   let tabContent='';
   if(mode==='4weeks'){
     const sunWs=getWeekStart(now,'0','00:00');
     const weeks=Array.from({length:4},(_,i)=>{
       const ws=new Date(sunWs);ws.setDate(sunWs.getDate()+i*7);
       const wExp=activeExp.reduce((s,e)=>s+(inWeek(e,ws)&&!e.paid?expWeekAmt(e,ws):0),0);
-      const bal=wNet-wExp;
+      const effInc=i===0?wNetEff:wNet;
+      const bal=effInc-wExp;
       const otAmt=activeExp.filter(e=>e.frequency==='one-time'&&!e.paid&&inWeek(e,ws)).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
       const d=new Date(ws);
-      return{label:i===0?'THIS WEEK':`WK OF ${MONTHS[d.getMonth()].toUpperCase()} ${d.getDate()}`,income:wNet,expenses:wExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
+      return{label:i===0?'THIS WEEK':`WK OF ${MONTHS[d.getMonth()].toUpperCase()} ${d.getDate()}`,income:effInc,expenses:wExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
     });
     tabContent=weeks.map(w=>`<div class="card mb12" style="border-left:2px solid ${w.balance>=0?'var(--grn)':'var(--red)'}">
       <div class="flex" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
@@ -2250,9 +2269,10 @@ function renderBudgetForecast(){
     const months=Array.from({length:6},(_,i)=>{
       const d=new Date(now.getFullYear(),now.getMonth()+i,1);
       const mExp=activeExp.reduce((s,e)=>inMonth(e,d.getFullYear(),d.getMonth())&&!e.paid?s+expMonthAmt(e,d.getFullYear(),d.getMonth()):s,0);
-      const bal=mNet-mExp;
+      const effInc=i===0?mNetEff:mNet;
+      const bal=effInc-mExp;
       const otAmt=activeExp.filter(e=>e.frequency==='one-time'&&!e.paid&&inMonth(e,d.getFullYear(),d.getMonth())).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-      return{label:MONTHS[d.getMonth()],year:d.getFullYear(),income:mNet,expenses:mExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
+      return{label:MONTHS[d.getMonth()],year:d.getFullYear(),income:effInc,expenses:mExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
     });
     tabContent=months.map(m=>`<div class="card mb12" style="border-left:2px solid ${m.balance>=0?'var(--grn)':'var(--red)'}">
       <div class="flex" style="justify-content:space-between;align-items:flex-start;margin-bottom:10px">
@@ -2524,21 +2544,36 @@ function renderBudgetForecastForecastOnly(){
   const {wNet,mNet}=getBudgetIncome();
   const now=new Date();
   const activeExp=S.expenses.filter(e=>e.active!==false);
+
+  // Imported + side income for current periods
+  const curWkStart=getWeekStart(now,S.schedule.weekStartDay,S.schedule.weekStartTime);
+  const curWkEnd=wkEnd(curWkStart);
+  const curMoStart=new Date(now.getFullYear(),now.getMonth(),1);
+  const curMoEnd=new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59,999);
+  const txIncCurWk=getTxIncome(curWkStart,curWkEnd);
+  const txIncCurMo=getTxIncome(curMoStart,curMoEnd);
+  const siCurWk=S.sideIncome.filter(s=>s.frequency==='one-time'&&s.date&&(()=>{const d=parseLocal(s.date);return d>=curWkStart&&d<=curWkEnd;})()).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
+  const siCurMo=S.sideIncome.filter(s=>s.frequency==='one-time'&&s.date&&(()=>{const d=parseLocal(s.date);return d>=curMoStart&&d<=curMoEnd;})()).reduce((t,s)=>t+(parseFloat(s.amount)||0),0);
+  const wNetEff=wNet+txIncCurWk+siCurWk;
+  const mNetEff=mNet+txIncCurMo+siCurMo;
+
   const sunWs=getWeekStart(now,'0','00:00');
   const weeks=Array.from({length:4},(_,i)=>{
     const ws=new Date(sunWs);ws.setDate(sunWs.getDate()+i*7);
     const wExp=activeExp.reduce((s,e)=>s+(inWeek(e,ws)&&!e.paid?expWeekAmt(e,ws):0),0);
-    const bal=wNet-wExp;
+    const effInc=i===0?wNetEff:wNet;
+    const bal=effInc-wExp;
     const otAmt=activeExp.filter(e=>e.frequency==='one-time'&&!e.paid&&inWeek(e,ws)).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
     const d=new Date(ws);
-    return{label:i===0?'THIS WEEK':`WK OF ${MONTHS[d.getMonth()].toUpperCase()} ${d.getDate()}`,income:wNet,expenses:wExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
+    return{label:i===0?'THIS WEEK':`WK OF ${MONTHS[d.getMonth()].toUpperCase()} ${d.getDate()}`,income:effInc,expenses:wExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
   });
   const months=Array.from({length:6},(_,i)=>{
     const d=new Date(now.getFullYear(),now.getMonth()+i,1);
     const mExp=activeExp.reduce((s,e)=>inMonth(e,d.getFullYear(),d.getMonth())&&!e.paid?s+expMonthAmt(e,d.getFullYear(),d.getMonth()):s,0);
-    const bal=mNet-mExp;
+    const effInc=i===0?mNetEff:mNet;
+    const bal=effInc-mExp;
     const otAmt=activeExp.filter(e=>e.frequency==='one-time'&&!e.paid&&inMonth(e,d.getFullYear(),d.getMonth())).reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    return{label:MONTHS[d.getMonth()],year:d.getFullYear(),income:mNet,expenses:mExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
+    return{label:MONTHS[d.getMonth()],year:d.getFullYear(),income:effInc,expenses:mExp,balance:bal,hasOT:otAmt>0,otAmt,isCurrent:i===0};
   });
 
   const barRow=(items,curKey,getKey)=>`<div class="flex" style="border:1px solid var(--bdr);margin-bottom:20px">
@@ -2599,11 +2634,13 @@ function renderBudgetGoals(){
         <div><div class="label2">Target</div><div class="inp-row"><span class="pre">$</span><input id="gf-target" type="number" min="0" placeholder="0" value="${_goalForm.target}" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
         <div><div class="label2">Already Saved</div><div class="inp-row"><span class="pre">$</span><input id="gf-saved" type="number" min="0" placeholder="0" value="${_goalForm.saved}" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
       </div>
-      ${linkableAccts.length?`<div class="mt8"><div class="label2">Link to Account (auto-sync balance)</div>
-        <select id="gf-acct" style="margin-top:4px">
-          <option value="">None</option>
+      <div class="mt8">
+        <div class="label2">Link to Account (auto-sync balance)</div>
+        ${linkableAccts.length?`<select id="gf-acct" style="margin-top:4px">
+          <option value="">None — I'll update manually</option>
           ${linkableAccts.map(a=>`<option value="${a.id}" ${_goalForm.accountId===a.id?'selected':''}>${a.label} — ${fmt$(a.value)}</option>`).join('')}
-        </select></div>`:''}
+        </select>`:`<div style="font-size:9px;color:var(--mut);margin-top:4px;padding:8px 10px;background:var(--surf);border:1px solid var(--bdr)">No accounts yet — add one in <button onclick="switchApp('worth');setTab('accounts')" style="font-size:9px;color:var(--blu);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Net Worth → Accounts</button> to link here.</div><input type="hidden" id="gf-acct" value="">`}
+      </div>
       <div class="flex gap8 mt10"><button class="btn-acc f1" onclick="saveGoal()">Add Goal</button><button class="btn-ghost" onclick="_showGoalForm=false;render()">Cancel</button></div>
     </div>`:`<button class="btn-ghost mb14" style="width:100%;border:1px dashed var(--bdrh)" onclick="_showGoalForm=true;render()">+ New Goal</button>`}
 
@@ -2624,7 +2661,7 @@ function renderBudgetGoals(){
         <div class="goal-bar"><div class="goal-fill" style="width:${pct}%"></div></div>
         <div class="flex" style="justify-content:space-between;font-size:9px;color:var(--mut);margin-bottom:10px"><span>${Math.round(pct)}% · ${fmt$(remain)} to go</span>${wks?`<span>~${wks} wks at surplus</span>`:''}</div>
         ${!linkedAcct?`<div class="flex" style="align-items:center;gap:8px"><span style="font-size:9px;color:var(--mut);white-space:nowrap">UPDATE:</span><div class="inp-row f1"><span class="pre">$</span><input type="number" min="0" value="${g.saved}" onblur="updateGoalSaved('${g.id}',this.value)" style="border:none;background:transparent;font-size:13px;padding:5px 4px"></div></div>`:''}
-        ${linkableAccts.length&&!linkedAcct?`<div style="margin-top:8px"><select onchange="linkGoalAccount('${g.id}',this.value)" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%"><option value="">Link to account…</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select></div>`:''}
+        ${!linkedAcct?`<div style="margin-top:8px">${linkableAccts.length?`<select onchange="linkGoalAccount('${g.id}',this.value)" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%"><option value="">Link to account…</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select>`:`<div style="font-size:9px;color:var(--mut2)">Add accounts in <button onclick="switchApp('worth');setTab('accounts')" style="font-size:9px;color:var(--blu);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Net Worth → Accounts</button> to link</div>`}</div>`:''}
         ${linkedAcct?`<button style="font-size:9px;color:var(--mut);background:none;border:none;cursor:pointer;padding:4px 0" onclick="linkGoalAccount('${g.id}','')">Unlink account</button>`:''}
       </div>`;
     }).join('')}
@@ -3609,13 +3646,16 @@ function renderSavingsChallenge(){
 
   if(!sc){
     const linkableAccts=S.assets.filter(a=>ACCOUNT_TYPES.map(t=>t.id).includes(a.type));
+    const acctHint=linkableAccts.length===0?`<div style="font-size:9px;color:var(--mut2);margin-bottom:8px">Add accounts in <button onclick="switchApp('worth');setTab('accounts')" style="font-size:9px;color:var(--blu);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Net Worth → Accounts</button> to link here.</div>`:'';
+    const acctSelect52=linkableAccts.length?`<select id="sc-acct-52" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%"><option value="">No account link</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select>`:`<input type="hidden" id="sc-acct-52" value="">`;
+    const acctSelectCustom=linkableAccts.length?`<select id="sc-acct-custom" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%"><option value="">No account link</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select>`:`<input type="hidden" id="sc-acct-custom" value="">`;
     content.innerHTML=`<div class="page">
       <div class="label">Savings Challenge</div>
       <div class="ff-box mb20">
         <div style="font-size:10px;letter-spacing:2px;color:var(--acc);margin-bottom:6px">52-WEEK CHALLENGE</div>
         <div style="font-size:13px;margin-bottom:4px">Save $1 in week 1, $2 in week 2... $52 in week 52</div>
         <div style="font-size:10px;color:var(--mut);margin-bottom:10px">Total at year end: $1,378</div>
-        ${linkableAccts.length?`<div class="mb10"><div class="label2">Link to account (optional)</div><select id="sc-acct-52" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%"><option value="">No account link</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select></div>`:''}
+        <div class="mb10"><div class="label2">Link to savings account (optional)</div>${acctHint}${acctSelect52}</div>
         <button class="btn-acc btn-sm" onclick="startChallenge('52week',document.getElementById('sc-acct-52')?.value||'')">Start This Challenge</button>
       </div>
       <div class="card bdr-l mb14">
@@ -3625,7 +3665,7 @@ function renderSavingsChallenge(){
           <div class="f1"><div class="label2">Weekly Amount ($)</div><input id="cc-amt" type="number" min="1" step="5" placeholder="50"></div>
           <div class="f1"><div class="label2">Duration (weeks)</div><input id="cc-wks" type="number" min="1" max="104" placeholder="52"></div>
         </div>
-        ${linkableAccts.length?`<div class="mb10"><div class="label2">Link to account (optional)</div><select id="sc-acct-custom" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%"><option value="">No account link</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select></div>`:''}
+        <div class="mb10"><div class="label2">Link to savings account (optional)</div>${acctHint}${acctSelectCustom}</div>
         <button class="btn-acc btn-sm" style="width:100%" onclick="startCustomChallenge()">Start Custom Challenge</button>
       </div>
     </div>`;
@@ -3653,8 +3693,8 @@ function renderSavingsChallenge(){
       <div class="prog mb6"><div class="prog-fill" style="width:${displayPct}%;background:var(--grn)"></div></div>
       <div style="font-size:9px;color:var(--mut);margin-bottom:10px">${done} of ${sc.weeks.length} weeks checked off · ${pct}% boxes ticked${linkedAcct?` · Account balance: ${fmt$(displaySaved)}`:''}</div>
       ${linkedAcct?`<div style="font-size:10px;color:var(--blu);padding:6px 10px;background:var(--blud);border:1px solid rgba(91,141,232,.27);margin-bottom:8px">◆ Linked: ${linkedAcct.label} — ${fmt$(linkedAcct.value)}<button onclick="S.savingsChallenge={...S.savingsChallenge,accountId:''};save('savingsChallenge');renderSavingsChallenge()" style="font-size:8px;color:var(--mut);background:none;border:none;cursor:pointer;margin-left:8px">unlink</button></div>`:
-      (linkableAccts.length?`<select onchange="S.savingsChallenge={...S.savingsChallenge,accountId:this.value};save('savingsChallenge');renderSavingsChallenge()" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%;margin-bottom:8px"><option value="">Link to a savings account…</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select>`:'')}
-    </div>
+      linkableAccts.length?`<select onchange="S.savingsChallenge={...S.savingsChallenge,accountId:this.value};save('savingsChallenge');renderSavingsChallenge()" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%;margin-bottom:8px"><option value="">Link to a savings account…</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select>`:
+      `<div style="font-size:9px;color:var(--mut2);margin-bottom:8px">Add accounts in <button onclick="switchApp('worth');setTab('accounts')" style="font-size:9px;color:var(--blu);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Net Worth → Accounts</button> to link your savings here.</div>`}    </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
       ${sc.weeks.map((w,i)=>`<button onclick="toggleWeek(${i})" style="padding:8px 4px;border:1px solid ${w.done?'var(--grn)':'var(--bdr)'};background:${w.done?'var(--grnd)':'var(--surf)'};color:${w.done?'var(--grn)':'var(--mut)'};font-size:9px;cursor:pointer;border-radius:4px;display:flex;flex-direction:column;align-items:center;gap:2px">
         <span style="font-size:7px;letter-spacing:1px">WK ${i+1}</span>
