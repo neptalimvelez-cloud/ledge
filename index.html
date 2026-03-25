@@ -7,7 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ledge">
 <meta name="theme-color" content="#0d0d0f">
-<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiTGVkZ2UiLCJzaG9ydF9uYW1lIjoiTGVkZ2UiLCJzdGFydF91cmwiOiIuIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzA3MDgwZiIsInRoZW1lX2NvbG9yIjoiIzBkMGQwZiJ9">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Ledge</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@300;400;500&display=swap');
@@ -4929,6 +4930,11 @@ function importJSON(){
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+// Register service worker for PWA install support (required by Android Chrome)
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+}
+
 // iOS 26 viewport fix: force screen.height so the app fills to the physical
 // bottom edge, ignoring Safari's URL bar. On Android, do nothing — default layout works.
 (function fixViewport(){
@@ -4947,9 +4953,6 @@ function importJSON(){
       if(el)el.style.height=h+'px';
     });
     document.body.style.height=h+'px';
-    // Bottom nav safe area padding
-    var bn=document.getElementById('bottom-nav');
-    if(bn)bn.style.paddingBottom='env(safe-area-inset-bottom,0px)';
   }
   set();
   window.addEventListener('resize',set);

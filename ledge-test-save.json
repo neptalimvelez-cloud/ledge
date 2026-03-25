@@ -1,0 +1,445 @@
+{
+  "schedule": {
+    "hourlyRate": "25.50",
+    "overtimeAfter": "40",
+    "overtimeMultiplier": "1.5",
+    "overtimeMode": "week",
+    "weekStartDay": "2",
+    "weekStartTime": "22:00",
+    "annualGoal": "75000",
+    "breakRules": [],
+    "shifts": {
+      "0": {
+        "active": false,
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "1": {
+        "active": false,
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "2": {
+        "active": true,
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "3": {
+        "active": true,
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "4": {
+        "active": true,
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "5": {
+        "active": true,
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "6": {
+        "active": true,
+        "start": "22:00",
+        "end": "06:00"
+      }
+    }
+  },
+  "deductions": [
+    {
+      "id": "ded-1",
+      "label": "Health Insurance",
+      "type": "flat",
+      "value": "180"
+    },
+    {
+      "id": "ded-2",
+      "label": "Dental",
+      "type": "flat",
+      "value": "25"
+    }
+  ],
+  "log": {
+    "2026-02-17": {
+      "2026-02-17": 36000,
+      "2026-02-18": 36000,
+      "2026-02-19": 36000,
+      "2026-02-20": 36000,
+      "2026-02-21": 36000
+    },
+    "2026-02-24": {
+      "2026-02-24": 36000,
+      "2026-02-25": 36000,
+      "2026-02-26": 36000,
+      "2026-02-27": 36000,
+      "2026-03-01": 36000
+    },
+    "2026-03-03": {
+      "2026-03-03": 36000,
+      "2026-03-04": 36000,
+      "2026-03-05": 32000
+    }
+  },
+  "customShifts": [],
+  "paychecks": {
+    "2026-02-17": {
+      "amount": "1812.50",
+      "date": "2026-02-20"
+    },
+    "2026-02-24": {
+      "amount": "1812.50",
+      "date": "2026-02-27"
+    }
+  },
+  "expenses": [
+    {
+      "id": "exp-1",
+      "label": "Rent",
+      "category": "housing",
+      "amount": "1200",
+      "frequency": "monthly",
+      "dayOfMonth": "1",
+      "active": true,
+      "paid": false
+    },
+    {
+      "id": "exp-2",
+      "label": "Groceries",
+      "category": "food",
+      "amount": "120",
+      "frequency": "weekly",
+      "dayOfMonth": null,
+      "active": true,
+      "paid": false
+    },
+    {
+      "id": "exp-3",
+      "label": "Gas/Commute",
+      "category": "transport",
+      "amount": "200",
+      "frequency": "monthly",
+      "dayOfMonth": "15",
+      "active": true,
+      "paid": false
+    },
+    {
+      "id": "exp-4",
+      "label": "Phone Bill",
+      "category": "utilities",
+      "amount": "65",
+      "frequency": "monthly",
+      "dayOfMonth": "20",
+      "active": true,
+      "paid": false
+    },
+    {
+      "id": "exp-5",
+      "label": "Streaming Services",
+      "category": "entertainment",
+      "amount": "35",
+      "frequency": "monthly",
+      "dayOfMonth": "5",
+      "active": true,
+      "paid": false
+    }
+  ],
+  "goals": [
+    {
+      "id": "goal-1",
+      "label": "Freedom Fund (Self-Employment)",
+      "target": "25000",
+      "saved": "3847.50"
+    },
+    {
+      "id": "goal-2",
+      "label": "Emergency Fund (3 months)",
+      "target": "15000",
+      "saved": "8200"
+    },
+    {
+      "id": "goal-3",
+      "label": "Vacation to National Parks",
+      "target": "3000",
+      "saved": "1200"
+    }
+  ],
+  "debts": [],
+  "envelopes": {
+    "housing": "1200",
+    "food": "520",
+    "transport": "200",
+    "utilities": "100",
+    "entertainment": "150"
+  },
+  "assets": [
+    {
+      "id": "asset-1",
+      "label": "Savings Account",
+      "value": "13247.50",
+      "type": "savings",
+      "note": "Main savings account at Chime",
+      "updatedDate": "2026-03-03",
+      "prevValue": "13000"
+    },
+    {
+      "id": "asset-2",
+      "label": "High-Yield Savings",
+      "value": "5000",
+      "type": "savings",
+      "note": "Emergency fund buffer",
+      "updatedDate": "2026-02-28",
+      "prevValue": "5000"
+    },
+    {
+      "id": "asset-3",
+      "label": "401(k)",
+      "value": "12800",
+      "type": "k401",
+      "note": "Amazon 401k",
+      "updatedDate": "2026-02-28",
+      "prevValue": "12000"
+    }
+  ],
+  "snapshots": [
+    {
+      "id": "snap-1",
+      "date": "2026-01-31",
+      "netWorth": "29847.50",
+      "assets": [
+        {
+          "label": "Savings Account",
+          "value": "12000"
+        },
+        {
+          "label": "High-Yield Savings",
+          "value": "5000"
+        },
+        {
+          "label": "401(k)",
+          "value": "12847.50"
+        }
+      ],
+      "debts": []
+    },
+    {
+      "id": "snap-2",
+      "date": "2026-02-28",
+      "netWorth": "31047.50",
+      "assets": [
+        {
+          "label": "Savings Account",
+          "value": "13000"
+        },
+        {
+          "label": "High-Yield Savings",
+          "value": "5000"
+        },
+        {
+          "label": "401(k)",
+          "value": "12000"
+        }
+      ],
+      "debts": []
+    }
+  ],
+  "milestones": [
+    {
+      "id": "ms-1",
+      "label": "First $10K Saved",
+      "target": "10000",
+      "achieved": true,
+      "achievedDate": "2025-11-15",
+      "debtFree": false,
+      "custom": false
+    },
+    {
+      "id": "ms-2",
+      "label": "$25K Freedom Fund Target",
+      "target": "25000",
+      "achieved": false,
+      "achievedDate": null,
+      "debtFree": false,
+      "custom": true
+    }
+  ],
+  "retirement401k": {
+    "accountBalance": "",
+    "balanceAnchor": {
+      "amount": "12000",
+      "date": "2026-02-28"
+    },
+    "employeeType": "percent",
+    "employeeAmount": "6",
+    "matchFormula": "100",
+    "matchUpTo": "3",
+    "rothOrPretax": "pretax"
+  },
+  "sideIncome": [
+    {
+      "id": "side-1",
+      "label": "Weekend Freelance Work",
+      "amount": "400",
+      "frequency": "monthly",
+      "date": "2026-03-15",
+      "note": "Gig work when available"
+    }
+  ],
+  "savingsChallenge": {
+    "type": "52-week",
+    "startDate": "2026-01-06",
+    "weeks": [
+      {
+        "n": 1,
+        "target": "1",
+        "done": true
+      },
+      {
+        "n": 2,
+        "target": "2",
+        "done": true
+      },
+      {
+        "n": 3,
+        "target": "3",
+        "done": true
+      },
+      {
+        "n": 4,
+        "target": "4",
+        "done": true
+      },
+      {
+        "n": 5,
+        "target": "5",
+        "done": true
+      },
+      {
+        "n": 6,
+        "target": "6",
+        "done": true
+      },
+      {
+        "n": 7,
+        "target": "7",
+        "done": true
+      },
+      {
+        "n": 8,
+        "target": "8",
+        "done": true
+      },
+      {
+        "n": 9,
+        "target": "9",
+        "done": true
+      },
+      {
+        "n": 10,
+        "target": "10",
+        "done": true
+      },
+      {
+        "n": 11,
+        "target": "11",
+        "done": false
+      },
+      {
+        "n": 12,
+        "target": "12",
+        "done": false
+      }
+    ]
+  },
+  "transactions": [
+    {
+      "id": "tx-1",
+      "date": "2026-02-19",
+      "description": "AMAZON Fresh Groceries",
+      "amount": "-45.23",
+      "category": "food",
+      "type": "Purchase",
+      "imported": true
+    },
+    {
+      "id": "tx-2",
+      "date": "2026-02-20",
+      "description": "EXXON Gas Station",
+      "amount": "-52.15",
+      "category": "transport",
+      "type": "Purchase",
+      "imported": true
+    },
+    {
+      "id": "tx-3",
+      "date": "2026-02-20",
+      "description": "AMAZON PAYROLL Direct Deposit",
+      "amount": "1812.50",
+      "category": "income",
+      "type": "Direct Deposit",
+      "imported": true
+    },
+    {
+      "id": "tx-4",
+      "date": "2026-02-21",
+      "description": "SPOTIFY Streaming",
+      "amount": "-12.99",
+      "category": "entertainment",
+      "type": "Purchase",
+      "imported": true
+    },
+    {
+      "id": "tx-5",
+      "date": "2026-02-25",
+      "description": "WHOLE FOODS Groceries",
+      "amount": "-62.47",
+      "category": "food",
+      "type": "Purchase",
+      "imported": true
+    },
+    {
+      "id": "tx-6",
+      "date": "2026-02-26",
+      "description": "VERIZON Mobile Bill",
+      "amount": "-65.00",
+      "category": "utilities",
+      "type": "Direct Debit",
+      "imported": true
+    },
+    {
+      "id": "tx-7",
+      "date": "2026-02-27",
+      "description": "AMAZON PAYROLL Direct Deposit",
+      "amount": "1812.50",
+      "category": "income",
+      "type": "Direct Deposit",
+      "imported": true
+    }
+  ],
+  "taxRate": "12",
+  "earlyDepositDays": 1,
+  "pin": "",
+  "calLegendHidden": false,
+  "incomeSafetyThresholds": {
+    "monthlyFloor": "3200",
+    "notifyOnShortfall": true
+  },
+  "autoCatRules": [
+    {
+      "id": "rule-1",
+      "keyword": "AMAZON",
+      "category": "shopping"
+    },
+    {
+      "id": "rule-2",
+      "keyword": "EXXON",
+      "category": "transport"
+    },
+    {
+      "id": "rule-3",
+      "keyword": "WHOLE FOODS",
+      "category": "food"
+    }
+  ],
+  "exportedAt": "2026-03-03T22:45:00.000Z"
+}
