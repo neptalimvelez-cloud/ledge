@@ -1180,7 +1180,7 @@ function expMonthAmt(e,yr,mo){
 // ─── Routing ──────────────────────────────────────────────────────────────────
 const TRACKER_TABS=[{id:'tracker',icon:'◉',lbl:'Tracker'},{id:'history',icon:'▦',lbl:'History'},{id:'income',icon:'◈',lbl:'Income'},{id:'deductions',icon:'−$',lbl:'Deductions'},{id:'setup',icon:'⚙',lbl:'Setup'}];
 const BUDGET_TABS=[{id:'overview',icon:'▣',lbl:'Overview'},{id:'expenses',icon:'≡',lbl:'Expenses'},{id:'goals',icon:'◆',lbl:'Goals'},{id:'save',icon:'▲',lbl:'Save'},{id:'debt',icon:'$',lbl:'Debt'}];
-const CAL_TABS=[{id:'calendar',icon:'◈',lbl:'Calendar'},{id:'forecast',icon:'▦',lbl:'Forecast'}];
+const CAL_TABS=[{id:'calendar',icon:'◈',lbl:'Calendar'},{id:'forecast',icon:'▦',lbl:'Forecast'},{id:'calhistory',icon:'≡',lbl:'History'}];
 const WORTH_TABS=[{id:'networth',icon:'◈',lbl:'Worth'},{id:'accounts',icon:'▣',lbl:'Accounts'},{id:'snapshots',icon:'▦',lbl:'History'},{id:'milestones',icon:'★',lbl:'Milestones'},{id:'retirement',icon:'◉',lbl:'Retire'}];
 
 function switchApp(app){
@@ -1506,24 +1506,29 @@ function renderTrackerTab(now,rate,ws,wk){
         <div style="font-size:8px;color:var(--mut)">${localStr(ws)} → ${localStr(wkEnd(ws))}</div>
       </div>
       ${(()=>{
-        // Week progress bar: how far through the pay week are we
+        // Week progress: how far through the pay week
         const wsMs=ws.getTime(),weMs=wkEnd(ws).getTime(),nowMs=now.getTime();
         const wkPct=Math.min(100,Math.max(0,((nowMs-wsMs)/(weMs-wsMs))*100));
-        // Hours progress: scheduled hours vs worked
         const totalSchSec=Array.from({length:7},(_,i)=>{const dow=(parseInt(S.schedule.weekStartDay||0)+i)%7,sh=S.schedule.shifts[dow];if(!sh?.active)return 0;const sm=toMin(sh.start),em=toMin(sh.end);return(em<sm?em+1440-sm:em-sm)*60;}).reduce((a,b)=>a+b,0);
         const workedSec=totalNetSec;
-        const hrsPct=totalSchSec>0?Math.min(100,(workedSec/totalSchSec)*100):0;
-        return '<div style="margin-bottom:14px">'
-          +'<div class="flex" style="justify-content:space-between;font-size:8px;color:var(--mut);margin-bottom:4px">'
-          +'<span>WEEK PROGRESS</span><span>'+Math.round(wkPct)+'% of week · '+(workedSec/3600).toFixed(1)+'h / '+(totalSchSec/3600).toFixed(0)+'h sched</span>'
+        // Which day index (0-6) are we on, and how far through it
+        const dayIndex=Math.min(6,Math.floor(((nowMs-wsMs)/(weMs-wsMs))*7));
+        // Position as percentage through the 7 rows
+        const topPct=wkPct;
+        return '<div style="margin-bottom:6px">'
+          +'<div class="flex" style="justify-content:space-between;font-size:8px;color:var(--mut);margin-bottom:8px">'
+          +'<span>WEEK PROGRESS</span><span>'+Math.round(wkPct)+'% · '+(workedSec/3600).toFixed(1)+'h / '+(totalSchSec/3600).toFixed(0)+'h</span>'
           +'</div>'
-          +'<div style="position:relative;height:6px;background:var(--bdr);border-radius:3px;overflow:hidden">'
-          +'<div style="position:absolute;left:0;top:0;height:100%;width:'+hrsPct+'%;background:var(--acc);border-radius:3px;transition:width .3s"></div>'
-          +'<div style="position:absolute;left:'+wkPct+'%;top:-1px;width:2px;height:8px;background:var(--mut);opacity:.6"></div>'
+          +'<div style="position:relative" id="week-days-wrap">'
+          // The progress line — horizontal bar spanning full width at the right vertical position
+          +'<div style="position:absolute;left:0;right:0;top:'+topPct+'%;z-index:2;pointer-events:none;display:flex;align-items:center">'
+          +'<div style="flex:1;height:2px;background:linear-gradient(90deg,var(--acc2),var(--acc));box-shadow:0 0 8px rgba(168,199,255,0.4),0 0 2px rgba(168,199,255,0.6);border-radius:1px"></div>'
+          +'<div style="width:6px;height:6px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px rgba(168,199,255,0.5);flex-shrink:0"></div>'
+          +'</div>'
+          +dayRows
           +'</div>'
           +'</div>';
       })()}
-      ${dayRows}
       ${otMode==='week'?`<div class="flex" style="justify-content:space-between;padding:9px 0;font-size:11px"><span class="mut">Total: ${(totalNetSec/3600).toFixed(1)}h${ot.inOT?` (${ot.otHours.toFixed(1)}h OT)`:''}</span><span style="color:${ot.inOT?'var(--org)':'var(--txt)'};font-weight:bold">${fmt$(wGross-thisCsG)}</span></div>`:''}
       ${csRows}
     </div>
@@ -2800,17 +2805,19 @@ function renderBudgetOverview(){
       });
       const maxVal=Math.max(...months6.flatMap(m=>[m.income,m.expenses]),1);
       const W=60,G=8,H=60,TW=months6.length*(W+G)-G;
+      const fmtBar=(v)=>{if(v>=1000)return'$'+Math.round(v/1000)+'k';if(v>=1)return'$'+Math.round(v);return'';};
       return`<div class="mb20">
         <div class="label">6-Month Trend</div>
-        <svg viewBox="0 0 ${TW} ${H+18}" style="width:100%;display:block">
+        <svg viewBox="0 0 ${TW} ${H+28}" style="width:100%;display:block">
           ${months6.map((m,i)=>{
             const ih=Math.max(2,(m.income/maxVal)*H),eh=Math.max(2,(m.expenses/maxVal)*H);
             const x=i*(W+G),iY=H-ih,eY=H-eh;
             return`<rect x="${x}" y="${iY}" width="${W*0.45}" height="${ih}" fill="rgba(77,186,110,.7)" rx="1"/>
                    <rect x="${x+W*0.5}" y="${eY}" width="${W*0.45}" height="${eh}" fill="rgba(192,80,80,.6)" rx="1"/>
+                   ${m.income>0?`<text x="${x+W*0.225}" y="${iY-3}" text-anchor="middle" fill="var(--grn)" font-size="6" font-family="monospace">${fmtBar(m.income)}</text>`:''}
+                   ${m.expenses>0?`<text x="${x+W*0.725}" y="${eY-3}" text-anchor="middle" fill="var(--red)" font-size="6" font-family="monospace">${fmtBar(m.expenses)}</text>`:''}
                    <text x="${x+W/2}" y="${H+12}" text-anchor="middle" fill="var(--mut)" font-size="7" font-family="monospace">${m.label}</text>
-                   ${m.surplus>0?`<text x="${x+W/4}" y="${iY-3}" text-anchor="middle" fill="var(--grn)" font-size="6">+${Math.round(m.surplus/100)*100>999?Math.round(m.surplus/1000)+'k':''}</text>`:''}`;
-          }).join('')}
+                   ${m.surplus!==0?`<text x="${x+W/2}" y="${H+22}" text-anchor="middle" fill="${m.surplus>=0?'var(--grn)':'var(--red)'}" font-size="6" font-family="monospace">${m.surplus>=0?'+':''}${fmtBar(Math.abs(m.surplus))}</text>`:''}`;          }).join('')}
         </svg>
         <div class="flex gap10" style="justify-content:center;margin-top:4px">
           <div style="display:flex;align-items:center;gap:4px;font-size:8px;color:var(--mut)"><div style="width:10px;height:6px;background:rgba(77,186,110,.7);border-radius:1px"></div>Income</div>
@@ -3089,7 +3096,8 @@ function renderCalApp(){
     </div>
   </div>`;
   if(S.calTab==='calendar')renderBudgetForecastCalOnly();
-  else renderBudgetForecastForecastOnly();
+  else if(S.calTab==='forecast')renderBudgetForecastForecastOnly();
+  else if(S.calTab==='calhistory')renderCalHistory();
 }
 
 function renderBudgetForecastCalOnly(){
@@ -3205,10 +3213,20 @@ function renderBudgetForecastCalOnly(){
         ${dayExps.length?`<div class="cal-lbl">${dayExps[0].label.slice(0,8)}${hasImported?'*':''}</div><div class="cal-amt">-$${total.toFixed(0)}</div>`:isDebt?'<div class="cal-lbl" style="color:var(--org)">debt</div>':''}
       </div>`;
     }).join('')}</div>
-    ${S.expenses.filter(e=>e.frequency!=='one-time'&&e.active!==false&&!e.archived).length?`<div class="card mt16 bdr-l">
-      <div class="label2 mb8">Recurring This Month</div>
-      ${S.expenses.filter(e=>e.frequency!=='one-time'&&e.active!==false&&!e.archived).map(e=>{const cat=catById[e.category]||CATS[CATS.length-1];return`<div class="row"><span class="rl"><span style="color:${cat.color}">${cat.icon} </span>${e.label}${e.dayOfMonth?` (day ${e.dayOfMonth})`:''}</span><span class="rr" style="color:var(--red)">-${fmt$(toMonthly(e))}</span></div>`;}).join('')}
-    </div>`:''}
+    ${(()=>{
+      // One-time expenses in this month, sorted by highest amount
+      const oneTimeExps=S.expenses.filter(e=>{
+        if(e.frequency!=='one-time'||e.active===false||e.archived)return false;
+        if(!e.oneTimeDate)return false;
+        const d=parseLocal(e.oneTimeDate);
+        return d.getFullYear()===yr&&d.getMonth()===mo;
+      }).sort((a,b)=>(parseFloat(b.amount)||0)-(parseFloat(a.amount)||0));
+      if(!oneTimeExps.length)return'';
+      return'<div class="card mt16 bdr-l">'
+        +'<div class="label2 mb8">One-Time Expenses This Month</div>'
+        +oneTimeExps.map(e=>{const cat=catById[e.category]||CATS[CATS.length-1];const d=parseLocal(e.oneTimeDate);return'<div class="row"><span class="rl"><span style="color:'+cat.color+'">'+cat.icon+' </span>'+e.label+' <span style="font-size:9px;color:var(--mut)">('+MONTHS[d.getMonth()]+' '+d.getDate()+')</span>'+(e.paid?' <span style="font-size:8px;color:var(--grn)">✓ paid</span>':'')+'</span><span class="rr" style="color:var(--red)">-'+fmt$(parseFloat(e.amount)||0)+'</span></div>';}).join('')
+        +'</div>';
+    })()}
     ${S.transactions.filter(t=>{if(!t.date)return false;const d=parseLocal(t.date);return d.getFullYear()===yr&&d.getMonth()===mo&&(parseFloat(t.amount)||0)<0;}).length?`<div style="font-size:8px;color:var(--mut2);margin-top:8px">* includes imported transactions</div>`:''}
   </div>`;
 }
@@ -3269,6 +3287,178 @@ function renderBudgetForecastForecastOnly(){
         <div class="right"><div style="font-size:9px;color:var(--mut)">${fmt$(m.income)} in</div><div style="font-size:9px;color:var(--red)">-${fmt$(m.expenses)} out</div></div>
       </div>${m.hasOT?`<div style="font-size:9px;color:var(--acc)">⚠ Includes ${fmt$(m.otAmt)} one-time</div>`:''}</div>`).join('')}
   </div>`;
+}
+
+let _calHistMonth=new Date().getMonth(),_calHistYear=new Date().getFullYear();
+function calHistPrev(){if(_calHistMonth===0){_calHistMonth=11;_calHistYear--;}else _calHistMonth--;renderCalApp();}
+function calHistNext(){if(_calHistMonth===11){_calHistMonth=0;_calHistYear++;}else _calHistMonth++;renderCalApp();}
+
+function renderCalHistory(){
+  const yr=_calHistYear,mo=_calHistMonth;
+  const moStart=new Date(yr,mo,1),moEnd=new Date(yr,mo+1,0,23,59,59,999);
+  const daysInMonth=moEnd.getDate();
+
+  // Collect all financial events for this month
+  const events=[];
+
+  // 1. Recurring expenses that fall in this month
+  for(const e of S.expenses.filter(x=>x.active!==false)){
+    if(e.frequency==='one-time'){
+      if(e.oneTimeDate){
+        const d=parseLocal(e.oneTimeDate);
+        if(d.getFullYear()===yr&&d.getMonth()===mo){
+          events.push({date:e.oneTimeDate,day:d.getDate(),label:e.label,amount:-(parseFloat(e.amount)||0),cat:e.category,source:'expense',sub:e.paid?'paid':'one-time'});
+        }
+      }
+    } else if(e.dayOfMonth){
+      const dom=parseInt(e.dayOfMonth);
+      if(dom>=1&&dom<=daysInMonth){
+        const dateStr=yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(dom).padStart(2,'0');
+        events.push({date:dateStr,day:dom,label:e.label,amount:-(parseFloat(e.amount)||0),cat:e.category,source:'expense',sub:e.frequency});
+      }
+    }
+  }
+
+  // 2. Debt payments due this month
+  for(const d of S.debts){
+    if(d.dayOfMonth){
+      const dom=parseInt(d.dayOfMonth);
+      if(dom>=1&&dom<=daysInMonth){
+        const dateStr=yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(dom).padStart(2,'0');
+        events.push({date:dateStr,day:dom,label:d.label+' (min)',amount:-(parseFloat(d.minimum)||0),cat:'debt',source:'debt',sub:'monthly'});
+      }
+    }
+  }
+
+  // 3. Imported transactions for this month
+  for(const t of S.transactions){
+    if(!t.date)continue;
+    const d=parseLocal(t.date);
+    if(d.getFullYear()!==yr||d.getMonth()!==mo)continue;
+    const amt=parseFloat(t.amount)||0;
+    const type=(t.type||'').toLowerCase();
+    const isIncome=amt>0&&(type==='deposit'||type==='direct deposit'||type==='cash bonus'||type==='income');
+    const isExpense=amt<0||(type==='purchase'||type==='direct debit');
+    if(isIncome){
+      events.push({date:t.date,day:d.getDate(),label:t.description||'Deposit',amount:Math.abs(amt),cat:t.category||'income',source:'transaction',sub:'income'});
+    } else if(isExpense){
+      events.push({date:t.date,day:d.getDate(),label:t.description||'Purchase',amount:-Math.abs(amt),cat:t.category||'custom',source:'transaction',sub:'expense'});
+    }
+  }
+
+  // 4. Side income for this month
+  for(const si of S.sideIncome){
+    if(si.frequency==='one-time'&&si.date){
+      const d=parseLocal(si.date);
+      if(d.getFullYear()===yr&&d.getMonth()===mo){
+        events.push({date:si.date,day:d.getDate(),label:si.label||'Side Income',amount:parseFloat(si.amount)||0,cat:'income',source:'side-income',sub:'one-time'});
+      }
+    } else if(si.frequency!=='one-time'){
+      // Recurring side income — show on day 1
+      events.push({date:yr+'-'+String(mo+1).padStart(2,'0')+'-01',day:1,label:si.label||'Side Income',amount:toMonthly({amount:si.amount,frequency:si.frequency}),cat:'income',source:'side-income',sub:si.frequency});
+    }
+  }
+
+  // 5. Paydays in this month
+  const rate=parseFloat(S.schedule.hourlyRate)||0;
+  const offset=parseInt(S.earlyDepositDays)||0;
+  const oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
+  if(rate){
+    const seenWks=new Set();
+    for(let dd=1;dd<=daysInMonth;dd++){
+      const dt=new Date(yr,mo,dd);
+      const ws=getWeekStart(dt,S.schedule.weekStartDay,S.schedule.weekStartTime);
+      const wsKey=localStr(ws);
+      if(seenWks.has(wsKey))continue;
+      seenWks.add(wsKey);
+      const we=wkEnd(ws);
+      const payDate=new Date(we);payDate.setDate(payDate.getDate()+1-offset);
+      const pc=S.paychecks[wsKey];
+      const actualPay=pc?.date?parseLocal(pc.date):payDate;
+      if(actualPay.getFullYear()===yr&&actualPay.getMonth()===mo){
+        const dm=S.log[wsKey]||{};
+        const cg=csInWeek(wsKey).reduce((s,c)=>s+csGross(c),0);
+        const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wsKey));
+        const net=applyDed(gross,S.deductions);
+        const amt=pc?.amount||net;
+        events.push({date:localStr(actualPay),day:actualPay.getDate(),label:'Paycheck'+(pc?.amount?' (actual)':' (est)'),amount:amt,cat:'income',source:'paycheck',sub:'weekly'});
+      }
+    }
+  }
+
+  // Sort by day, then by amount descending (income first)
+  events.sort((a,b)=>a.day-b.day||b.amount-a.amount);
+
+  const totalIncome=events.filter(e=>e.amount>0).reduce((s,e)=>s+e.amount,0);
+  const totalExpenses=events.filter(e=>e.amount<0).reduce((s,e)=>s+Math.abs(e.amount),0);
+  const netFlow=totalIncome-totalExpenses;
+
+  // Group by day
+  const byDay={};
+  for(const ev of events){
+    if(!byDay[ev.day])byDay[ev.day]=[];
+    byDay[ev.day].push(ev);
+  }
+  const dayKeys=Object.keys(byDay).map(Number).sort((a,b)=>a-b);
+
+  const today=new Date();
+  const isCurrentMonth=today.getFullYear()===yr&&today.getMonth()===mo;
+
+  let eventsHTML='';
+  for(const dk of dayKeys){
+    const dayEvents=byDay[dk];
+    const dayTotal=dayEvents.reduce((s,e)=>s+e.amount,0);
+    const isPast=isCurrentMonth?dk<today.getDate():new Date(yr,mo,dk)<today;
+    const isToday=isCurrentMonth&&dk===today.getDate();
+    const dayLabel=DAYS[new Date(yr,mo,dk).getDay()];
+
+    let rowsHTML='';
+    for(const ev of dayEvents){
+      const cat=catById[ev.cat]||catById['custom']||CATS[CATS.length-1];
+      const isInc=ev.amount>0;
+      const srcBadge=ev.source==='transaction'?'<span style="font-size:7px;color:var(--mut2);margin-left:4px">TX</span>'
+        :ev.source==='paycheck'?'<span style="font-size:7px;color:var(--blu);margin-left:4px">PAY</span>'
+        :ev.source==='side-income'?'<span style="font-size:7px;color:var(--grn);margin-left:4px">SIDE</span>'
+        :ev.source==='debt'?'<span style="font-size:7px;color:var(--org);margin-left:4px">DEBT</span>'
+        :'';
+      rowsHTML+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03)">'
+        +'<div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">'
+        +'<span style="color:'+cat.color+';font-size:12px;flex-shrink:0">'+cat.icon+'</span>'
+        +'<span style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ev.label+srcBadge+'</span>'
+        +'</div>'
+        +'<span style="font-size:12px;font-weight:500;color:'+(isInc?'var(--grn)':'var(--red)')+';flex-shrink:0;margin-left:8px">'+(isInc?'+':'')+fmt$(ev.amount)+'</span>'
+        +'</div>';
+    }
+
+    eventsHTML+='<div style="margin-bottom:2px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:'+(isToday?'rgba(168,199,255,0.08)':'rgba(255,255,255,0.02)')+';border-left:2px solid '+(isToday?'var(--acc)':isPast?'rgba(255,255,255,0.06)':'var(--bdr)')+';cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'">'
+      +'<div style="display:flex;align-items:center;gap:8px">'
+      +'<span style="font-size:10px;color:'+(isToday?'var(--acc)':'var(--mut)')+';font-family:\'DM Mono\',monospace;width:32px">'+dayLabel+'</span>'
+      +'<span style="font-size:12px;color:'+(isToday?'var(--acc)':'var(--txt)')+';font-weight:'+(isToday?'600':'400')+'">'+MONTHS[mo]+' '+dk+'</span>'
+      +'<span style="font-size:9px;color:var(--mut)">'+dayEvents.length+' item'+(dayEvents.length!==1?'s':'')+'</span>'
+      +'</div>'
+      +'<span style="font-size:12px;font-weight:bold;color:'+(dayTotal>=0?'var(--grn)':'var(--red)')+'">'+(dayTotal>=0?'+':'')+fmt$(dayTotal)+'</span>'
+      +'</div>'
+      +'<div style="padding:2px 12px 6px 42px;display:'+(isToday?'block':'none')+'">'+rowsHTML+'</div>'
+      +'</div>';
+  }
+
+  content.innerHTML='<div class="page">'
+    +'<div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:14px">'
+    +'<button class="btn-ghost btn-sm" onclick="calHistPrev()">←</button>'
+    +'<div style="font-size:12px;letter-spacing:2px">'+MONTHS[mo].toUpperCase()+' '+yr+'</div>'
+    +'<button class="btn-ghost btn-sm" onclick="calHistNext()">→</button>'
+    +'</div>'
+
+    +'<div class="flex gap8 mb14">'
+    +'<div class="stat-box" style="border-left:2px solid var(--grn)"><div class="sl">Income</div><div class="sv" style="color:var(--grn)">'+fmt$(totalIncome)+'</div></div>'
+    +'<div class="stat-box" style="border-left:2px solid var(--red)"><div class="sl">Expenses</div><div class="sv" style="color:var(--red)">'+fmt$(totalExpenses)+'</div></div>'
+    +'<div class="stat-box" style="border-left:2px solid '+(netFlow>=0?'var(--grn)':'var(--red)')+'"><div class="sl">Net Flow</div><div class="sv" style="color:'+(netFlow>=0?'var(--grn)':'var(--red)')+'">'+fmt$(netFlow,true)+'</div></div>'
+    +'</div>'
+
+    +(events.length?eventsHTML:'<div style="text-align:center;padding:40px 0;color:var(--mut)"><div style="font-size:28px;opacity:.3;margin-bottom:8px">◈</div><div style="font-size:11px;letter-spacing:2px">No financial events this month</div></div>')
+
+    +'</div>';
 }
 
 function renderBudgetGoals(){
