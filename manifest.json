@@ -3,8 +3,8 @@
   "short_name": "Ledge",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#07080f",
-  "theme_color": "#0d0d0f",
+  "background_color": "#080a14",
+  "theme_color": "#080a14",
   "icons": [
     {
       "src": "icon-192.png",
