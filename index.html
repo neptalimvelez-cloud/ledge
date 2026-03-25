@@ -4385,13 +4385,19 @@ function getExpenseTrend(){
 // ════════════════════════════════════════════════════════════════
 
 // The AI prompt for the user to copy
-const TX_IMPORT_PROMPT=`You are a bank statement parser. I will attach or paste a bank statement (PDF, image, or text). Extract every real transaction and output ONLY lines in this exact pipe-delimited format with NO header row, NO commentary, NO markdown:
+const TX_IMPORT_PROMPT=`You are a bank statement parser. I will attach or paste a bank statement (PDF, image, or text). Extract every real transaction and output lines in this exact format with NO other text:
 
-YYYY-MM-DD|amount|category|description
+For money RECEIVED (deposits, paychecks, refunds, credits, interest):
+TX+>YYYY-MM-DD|amount|category|description
+
+For money SPENT (purchases, payments, withdrawals, debits):
+TX->YYYY-MM-DD|amount|category|description
+
+Every transaction line MUST start with either TX+> or TX-> — this is required. Amount is always a positive number (the prefix handles the sign). No $ sign, no commas in amount.
 
 Rules:
 - YYYY-MM-DD: transaction date, 4-digit year
-- amount: negative for money spent (purchases, payments, withdrawals, debits), positive for money received (deposits, paychecks, refunds, credits). Plain number, no $ sign, no commas. Examples: -16.71, 333.53, -9.99
+- amount: always positive plain number. Examples: 16.71, 333.53, 9.99
 - category: MUST be exactly one of: housing, utilities, groceries, transport, phone, internet, streaming, insurance, gym, debt, savings, dining, entertain, medical, personal, clothing, income, transfer, custom
 - description: short clean merchant/payee name. Strip card numbers, bank codes, phone numbers, state abbreviations, and raw merchant IDs. Examples: "Shell" not "SHELL57544208705 WEYERS CAVE VA", "Spotify" not "SPOTIFY 877 778 1161 NY", "Amazon Payroll" not "AMAZON.COM SVCS PAYROLL"
 
@@ -4422,39 +4428,47 @@ SKIP these — do NOT output them:
 - Lines that are just running balance or account summary info
 - Page headers, footers, statement metadata
 
-Output ONLY the pipe-delimited lines, one per transaction. No blank lines. No other text.`;
+Output ONLY TX+> and TX-> lines, one per transaction. No blank lines, no commentary, no markdown.`;
 
-// Parse AI-formatted pipe-delimited output
+// Parse AI-formatted output — only lines starting with TX+> or TX-> are transactions
 function parseImportText(raw){
   const validCats=new Set(['housing','utilities','groceries','transport','phone','internet','streaming','insurance','gym','debt','savings','dining','entertain','medical','personal','clothing','income','transfer','custom']);
   const lines=raw.trim().split('\n').filter(l=>l.trim());
   const rows=[];
 
   for(const line of lines){
-    const parts=line.split('|');
+    const trimmed=line.trim();
+    // Only process lines starting with TX+> or TX->
+    let sign=0;
+    if(trimmed.startsWith('TX+>'))sign=1;
+    else if(trimmed.startsWith('TX->'))sign=-1;
+    else continue;
+    const payload=trimmed.slice(4); // strip 4-char prefix
+
+    const parts=payload.split('|');
     if(parts.length<4)continue;
 
     const[dateStr,amtStr,cat,...descParts]=parts;
     const date=dateStr.trim();
-    // Validate date format YYYY-MM-DD
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;
 
-    const amount=parseFloat(amtStr.trim().replace(/[$,]/g,''));
-    if(isNaN(amount))continue;
+    const amtClean=amtStr.trim().replace(/[\s$,\-+]/g,'');
+    let amount=parseFloat(amtClean);
+    if(isNaN(amount)||amount===0)continue;
+
+    // Apply sign from prefix
+    amount=sign*amount;
 
     const category=cat.trim().toLowerCase();
-    const description=descParts.join('|').trim(); // rejoin in case desc has pipes
+    const description=descParts.join('|').trim();
 
-    // Map income/transfer to type for backward compat, default category
+    // Derive type for backward compat
     let type='';
     if(amount>0)type='deposit';
     else type='purchase';
-    if(category==='income')type='deposit';
     if(category==='transfer')type=amount>0?'deposit':'transfer';
 
-    // Use valid category or fall back to custom
     const finalCat=validCats.has(category)?category:'custom';
-    // For income/transfer, keep as-is (they're valid Ledge display categories via catById fallback)
 
     rows.push({date,description,amount,type,category:finalCat,raw:line});
   }
@@ -4512,8 +4526,8 @@ function renderTransactions(){
       <!-- Step 2: Paste the AI output -->
       <div class="card bdr-l mb14">
         <div class="label2 mb6">Step 2 — Paste AI Output</div>
-        <div style="font-size:9px;color:var(--mut);margin-bottom:8px;line-height:1.6">Paste the AI's response below. Each line should look like:<br><span style="font-family:var(--mono);font-size:8px">2026-02-04|333.53|income|Amazon Payroll</span></div>
-        <textarea id="tx-paste" rows="6" placeholder="Paste AI output here…&#10;&#10;2026-02-01|-16.71|transport|Shell&#10;2026-02-04|333.53|income|Amazon Payroll&#10;2026-02-08|-23.64|transport|Sheetz" style="width:100%;font-size:11px;resize:vertical;line-height:1.5;padding:10px;background:var(--bg);border:1px solid var(--bdr);color:var(--txt);font-family:monospace"></textarea>
+        <div style="font-size:9px;color:var(--mut);margin-bottom:8px;line-height:1.6">Paste the AI's response below. Each line starts with <span style="font-family:var(--mono)">TX+></span> (received) or <span style="font-family:var(--mono)">TX-></span> (spent):<br><span style="font-family:var(--mono);font-size:8px">TX->2026-02-01|16.71|transport|Shell</span><br><span style="font-family:var(--mono);font-size:8px">TX+>2026-02-04|333.53|income|Amazon Payroll</span></div>
+        <textarea id="tx-paste" rows="6" placeholder="Paste AI output here…&#10;&#10;TX->2026-02-01|16.71|transport|Shell&#10;TX+>2026-02-04|333.53|income|Amazon Payroll&#10;TX->2026-02-08|23.64|transport|Sheetz" style="width:100%;font-size:11px;resize:vertical;line-height:1.5;padding:10px;background:var(--bg);border:1px solid var(--bdr);color:var(--txt);font-family:monospace"></textarea>
         <button class="btn-acc mt10" style="width:100%" onclick="handleTxPaste()">Import Transactions →</button>
       </div>
 
@@ -4627,7 +4641,7 @@ function handleTxPaste(){
 function processTxRaw(){
   const rows=parseImportText(_txWizard.rawText);
   if(!rows.length){
-    alert('Could not parse any transactions. Make sure the AI output has one transaction per line in this format:\n\nYYYY-MM-DD|amount|category|description\n\nExample:\n2026-02-01|-16.71|transport|Shell');
+    alert('Could not parse any transactions. Make sure the AI output has lines starting with TX+> or TX-> like:\n\nTX->2026-02-01|16.71|transport|Shell\nTX+>2026-02-04|333.53|income|Amazon Payroll');
     return;
   }
 
