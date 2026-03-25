@@ -4381,135 +4381,91 @@ function getExpenseTrend(){
 // Stored inside expenses as a special type — we add a negotiation log field
 
 // ════════════════════════════════════════════════════════════════
-// TRANSACTIONS — Bank Statement Import & Categorization Wizard
+// TRANSACTIONS — AI-Formatted Bank Statement Import
 // ════════════════════════════════════════════════════════════════
 
-// Auto-categorization keyword map
-const TX_CAT_KEYWORDS={
-  transport:['shell','sheetz','fuel','liberty','exxon','bp','chevron','sunoco','gas station','pilot','wawa','speedway','marathon','circle k','kwik','petro','loves ','flying j','valero','mobil','citgo'],
-  groceries:['food lion','walmart','kroger','safeway','publix','aldi','trader joe','whole foods','giant','harris teeter','wegmans','lidl','save a lot','food city','meijer','heb ','winn','piggly','market basket'],
-  dining:['burger king','mcdonald','wendy','subway','chipotle','taco bell','pizza','domino','papa john','chick-fil','kfc','popeye','sonic','arby','panera','starbucks','dunkin','ihop','denny','applebee','olive garden','restaurant','grill','cafe','diner','kitchen','sushi','thai','chinese','mexican'],
-  utilities:['electric','power','utility','verizon','att ','t-mobile','sprint','comcast','spectrum','xfinity','cox ','directv','dish net','hulu','netflix','spotify','apple.com/bill','google play','amazon prime'],
-  housing:['rent','lease','apartment','mortgage','hoa ','property'],
-  insurance:['geico','progressive','state farm','allstate','nationwide','usaa','liberty mutual','farmers','insurance','aetna','cigna','humana','bcbs','blue cross'],
-  medical:['pharmacy','cvs','walgreen','rite aid','hospital','clinic','doctor','dental','vision','health'],
-  personal:['haircut','barber','salon','spa','beauty','nail','supercuts'],
-  clothing:['gap ','old navy','h&m','zara','target','forever 21','ross ','tj maxx','marshalls','kohls','jcpenney','macys','nordstrom','nike','adidas'],
-  entertain:['netflix','hulu','disney','hbo','espn','youtube','twitch','steam','gamestop','amc ','regal','cinemark','ticketmaster','spotify'],
-  debt:['capital one','chase ','discover','citi ','wells fargo','bank of america','navy federal','usaa','sofi','affirm','klarna','afterpay','incharge','flexible finance','loan','credit'],
-  savings:['transfer to savings','zelle','cashapp','cash app','venmo','paypal send'],
-  custom:['amazon','ebay','etsy','walmart.com','best buy','home depot','lowes','costco','sams club','dollar','five below','family dollar'],
-};
+// The AI prompt for the user to copy
+const TX_IMPORT_PROMPT=`You are a bank statement parser. I will attach or paste a bank statement (PDF, image, or text). Extract every real transaction and output ONLY lines in this exact pipe-delimited format with NO header row, NO commentary, NO markdown:
 
-function autoCategorizeTx(desc){
-  const d=(desc||'').toLowerCase();
-  // Check user-defined rules first
-  for(const rule of S.autoCatRules){
-    if(d.includes((rule.keyword||'').toLowerCase()))return rule.category;
-  }
-  for(const[cat,kws]of Object.entries(TX_CAT_KEYWORDS)){
-    if(kws.some(k=>d.includes(k)))return cat;
-  }
-  return'custom';
-}
+YYYY-MM-DD|amount|category|description
 
-// Parse pasted text or CSV into raw row objects
+Rules:
+- YYYY-MM-DD: transaction date, 4-digit year
+- amount: negative for money spent (purchases, payments, withdrawals, debits), positive for money received (deposits, paychecks, refunds, credits). Plain number, no $ sign, no commas. Examples: -16.71, 333.53, -9.99
+- category: MUST be exactly one of: housing, utilities, groceries, transport, phone, internet, streaming, insurance, gym, debt, savings, dining, entertain, medical, personal, clothing, income, transfer, custom
+- description: short clean merchant/payee name. Strip card numbers, bank codes, phone numbers, state abbreviations, and raw merchant IDs. Examples: "Shell" not "SHELL57544208705 WEYERS CAVE VA", "Spotify" not "SPOTIFY 877 778 1161 NY", "Amazon Payroll" not "AMAZON.COM SVCS PAYROLL"
+
+Category guidance:
+- income: paychecks, direct deposits, payroll, tax refunds, interest earned, cash bonuses
+- transfer: internal bank transfers, Zelle, Cash App, Venmo, PayPal sends, savings transfers, paycheck percentage transfers
+- transport: gas stations (Shell, Sheetz, BP, Exxon), car maintenance, parking, tolls, Uber, Lyft
+- debt: credit card payments (Capital One, Chase, Discover), loan payments, Affirm, Klarna, Afterpay, collections, Flexible Finance
+- savings: transfers specifically labeled as savings deposits
+- groceries: Food Lion, Walmart, Kroger, Aldi, supermarkets
+- dining: restaurants, fast food, DoorDash, Uber Eats, GrubHub, coffee shops
+- utilities: electric, gas (Columbia Gas, Dominion), water, sewer
+- phone: phone bills, US Mobile, T-Mobile, Verizon, AT&T
+- internet: internet service providers, Comcast, Spectrum
+- streaming: Netflix, Hulu, Spotify, YouTube Premium, Disney+, Audible, Snapchat subscriptions
+- insurance: Progressive, GEICO, State Farm, MetLife, health/dental/vision/pet insurance
+- medical: hospitals, clinics, vet/animal clinics, pharmacies, CVS, Walgreens
+- gym: gym memberships, fitness classes, Peloton
+- housing: rent, mortgage, HOA
+- personal: haircuts, beauty, vape shops, tobacco
+- clothing: clothing stores, shoes, accessories
+- entertain: movies, gaming, concerts, amusement, ticketing
+- custom: anything that doesn't clearly fit above (subscriptions like Acorns, misc purchases)
+
+SKIP these — do NOT output them:
+- Opening/closing balance lines
+- Rejected/failed withdrawal attempts
+- Lines that are just running balance or account summary info
+- Page headers, footers, statement metadata
+
+Output ONLY the pipe-delimited lines, one per transaction. No blank lines. No other text.`;
+
+// Parse AI-formatted pipe-delimited output
 function parseImportText(raw){
+  const validCats=new Set(['housing','utilities','groceries','transport','phone','internet','streaming','insurance','gym','debt','savings','dining','entertain','medical','personal','clothing','income','transfer','custom']);
   const lines=raw.trim().split('\n').filter(l=>l.trim());
   const rows=[];
 
-  // Detect CSV (has commas AND consistent column count) vs free-text
-  const firstLine=lines[0]||'';
-  const isCSV=firstLine.split(',').length>=3&&!firstLine.match(/^\d{1,2}\/\d{1,2}\/\d{4}/);
-
-  if(isCSV){
-    // CSV path — find date/amount/desc columns from header or first data row
-    for(const line of lines){
-      const parts=parseCSVLine(line);
-      // Find date
-      let date='',amount=0,type='',desc='';
-      for(const p of parts){
-        const t=p.trim().replace(/"/g,'');
-        if(!date&&/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t)){
-          const[mo,da,yr]=t.split('/');
-          date=`${yr}-${mo.padStart(2,'0')}-${da.padStart(2,'0')}`;
-        } else if(!date&&/^\d{4}-\d{2}-\d{2}$/.test(t)){
-          date=t;
-        } else if(!amount&&/^-?\$?[\d,]+\.\d{2}$/.test(t)){
-          amount=parseFloat(t.replace(/[$,]/g,''));
-        } else if(['purchase','deposit','transfer','direct debit','adjustment','cash bonus'].includes(t.toLowerCase())){
-          type=t.toLowerCase();
-        } else if(t.length>2&&!desc){
-          desc=t;
-        }
-      }
-      if(date&&(amount||desc))rows.push({date,description:desc,amount,type,raw:line});
-    }
-    return rows;
-  }
-
-  // Free-text path (PDF paste, Chime-style, etc.)
-  // Each line: DATE  DESCRIPTION  [MERCHANT_CODE]  TYPE  AMOUNT  AMOUNT  DATE
-
   for(const line of lines){
-    const dateRe=/^(\d{1,2}\/\d{1,2}\/\d{4})\s+/;
-    const dm=line.match(dateRe);
-    if(!dm)continue;
+    const parts=line.split('|');
+    if(parts.length<4)continue;
 
-    const[mo,da,yr]=dm[1].split('/');
-    const date=`${yr}-${mo.padStart(2,'0')}-${da.padStart(2,'0')}`;
+    const[dateStr,amtStr,cat,...descParts]=parts;
+    const date=dateStr.trim();
+    // Validate date format YYYY-MM-DD
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;
 
-    // Find type keyword — check longer/more specific keywords first to avoid
-    // "Deposit" matching inside "Secured Deposit Account" (Chime internal transfers)
-    const TYPE_KWS_ORDERED=['Direct Debit','Cash Bonus','Adjustment','Purchase','Transfer','Deposit'];
+    const amount=parseFloat(amtStr.trim().replace(/[$,]/g,''));
+    if(isNaN(amount))continue;
+
+    const category=cat.trim().toLowerCase();
+    const description=descParts.join('|').trim(); // rejoin in case desc has pipes
+
+    // Map income/transfer to type for backward compat, default category
     let type='';
-    for(const kw of TYPE_KWS_ORDERED){
-      // Only match if the keyword appears as a standalone column value,
-      // i.e. surrounded by spaces or at end of meaningful content — not inside "Secured Deposit Account"
-      const re=new RegExp('(?<![A-Za-z])'+kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![A-Za-z])');
-      if(re.test(line)&&!(kw==='Deposit'&&line.includes('Secured Deposit Account'))){
-        type=kw.toLowerCase();break;
-      }
-    }
+    if(amount>0)type='deposit';
+    else type='purchase';
+    if(category==='income')type='deposit';
+    if(category==='transfer')type=amount>0?'deposit':'transfer';
 
-    // Extract dollar amounts
-    const amts=[...line.matchAll(/-?\$[\d,]+\.\d{2}/g)].map(m=>parseFloat(m[0].replace(/[$,]/g,'')));
-    const amount=amts.find(a=>a<0)??amts[0]??0;
+    // Use valid category or fall back to custom
+    const finalCat=validCats.has(category)?category:'custom';
+    // For income/transfer, keep as-is (they're valid Ledge display categories via catById fallback)
 
-    // Build description: start after date, strip type keyword, amounts, trailing date, ALL-CAPS codes
-    let desc=line.slice(dm[0].length);
-    if(type)desc=desc.replace(new RegExp('\\b'+type.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i'),'');
-    desc=desc.replace(/-?\$[\d,]+\.\d{2}/g,'');
-    desc=desc.replace(/\s+\d{1,2}\/\d{1,2}\/\d{4}\s*$/,'');
-    // Strip ALL-CAPS merchant code blocks (Chime's raw merchant identifiers)
-    desc=desc.replace(/\b[A-Z][A-Z\s\d#.*&,@!\/\\-]{4,}\b/g,' ');
-    desc=desc.replace(/^[\s:,]+|[\s:,]+$/g,'').replace(/\s+/g,' ').trim();
-
-    if(date&&(amount!==0||desc))rows.push({date,description:desc,amount,type,raw:line});
+    rows.push({date,description,amount,type,category:finalCat,raw:line});
   }
   return rows;
 }
 
-function parseCSVLine(line){
-  const result=[];let cur='',inQ=false;
-  for(const ch of line){
-    if(ch==='"'){inQ=!inQ;}
-    else if(ch===','&&!inQ){result.push(cur);cur='';}
-    else cur+=ch;
-  }
-  result.push(cur);
-  return result;
-}
-
-// Wizard state
+// Wizard state — simplified: import → summary → done
 let _txWizard={
-  step:'import', // import | map | filter | review | done
+  step:'import',
   rawText:'',
   parsedRows:[],
-  colMap:{date:0,desc:1,amount:3,type:2}, // column indices for CSV
-  filterTypes:['purchase','direct debit'],
-  reviewIdx:0,
-  pendingTxns:[],
   fileName:'',
 };
 
@@ -4533,7 +4489,7 @@ function renderTransactions(){
   if(w.step==='import'){
     content.innerHTML=`<div class="page">
       <div class="label">Bank Statement Import</div>
-      <div style="font-size:10px;color:var(--mut);margin-bottom:16px;line-height:1.7">Paste your bank statement text or upload a CSV export. Chime, Capital One, Chase, and most banks support CSV export from the web portal.</div>
+      <div style="font-size:10px;color:var(--mut);margin-bottom:16px;line-height:1.7">Use AI to parse your bank statement, then paste the output here. Tap "Copy Prompt" below, give it to any AI (Claude, ChatGPT, etc.) with your statement attached, then paste the result.</div>
 
       ${imported.length>0?`<div class="card accent-l mb20">
         <div class="label2">Imported Transactions</div>
@@ -4546,22 +4502,19 @@ function renderTransactions(){
         </div>
       </div>`:''}
 
-      <!-- Upload CSV -->
+      <!-- Step 1: Copy the AI prompt -->
       <div class="card bdr-l mb14">
-        <div class="label2 mb6">Option 1 — Upload CSV File</div>
-        <div style="font-size:9px;color:var(--mut);margin-bottom:10px;line-height:1.6">Download your statement as CSV from your bank's website or app, then upload here.</div>
-        <input type="file" accept=".csv,.txt" id="tx-file-input" style="display:none" onchange="handleTxFile(event)">
-        <button class="btn-ghost" style="width:100%;padding:14px;border:2px dashed var(--bdrh)" onclick="document.getElementById('tx-file-input').click()">
-          ⬆ Tap to select CSV file
-        </button>
+        <div class="label2 mb6">Step 1 — Copy the AI Prompt</div>
+        <div style="font-size:9px;color:var(--mut);margin-bottom:10px;line-height:1.6">Copy this prompt and paste it into any AI assistant along with your bank statement (PDF, screenshot, or copied text).</div>
+        <button class="btn-ghost" id="copy-prompt-btn" style="width:100%;padding:12px" onclick="copyTxPrompt()">📋 Copy Prompt to Clipboard</button>
       </div>
 
-      <!-- Paste text -->
+      <!-- Step 2: Paste the AI output -->
       <div class="card bdr-l mb14">
-        <div class="label2 mb6">Option 2 — Paste Statement Text</div>
-        <div style="font-size:9px;color:var(--mut);margin-bottom:8px;line-height:1.6">Copy the transaction table from your PDF viewer or bank portal and paste below.</div>
-        <textarea id="tx-paste" rows="6" placeholder="Paste transaction data here…&#10;&#10;Example (Chime):&#10;2/01/2026  Sheetz  Purchase  -$30.77  -$30.77  2/01/2026&#10;2/02/2026  Food Lion  Purchase  -$36.50  -$36.50  2/02/2026" style="width:100%;font-size:11px;resize:vertical;line-height:1.5;padding:10px;background:var(--bg);border:1px solid var(--bdr);color:var(--txt);font-family:monospace"></textarea>
-        <button class="btn-acc mt10" style="width:100%" onclick="handleTxPaste()">Parse Transactions →</button>
+        <div class="label2 mb6">Step 2 — Paste AI Output</div>
+        <div style="font-size:9px;color:var(--mut);margin-bottom:8px;line-height:1.6">Paste the AI's response below. Each line should look like:<br><span style="font-family:var(--mono);font-size:8px">2026-02-04|333.53|income|Amazon Payroll</span></div>
+        <textarea id="tx-paste" rows="6" placeholder="Paste AI output here…&#10;&#10;2026-02-01|-16.71|transport|Shell&#10;2026-02-04|333.53|income|Amazon Payroll&#10;2026-02-08|-23.64|transport|Sheetz" style="width:100%;font-size:11px;resize:vertical;line-height:1.5;padding:10px;background:var(--bg);border:1px solid var(--bdr);color:var(--txt);font-family:monospace"></textarea>
+        <button class="btn-acc mt10" style="width:100%" onclick="handleTxPaste()">Import Transactions →</button>
       </div>
 
       ${catEntries.length>0?`<div class="mb20">
@@ -4573,21 +4526,6 @@ function renderTransactions(){
           }).join('');
         })()}
       </div>`:''}
-
-      <!-- Auto-Categorization Rules -->
-      <div class="card bdr-l mb14">
-        <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div class="label" style="margin:0">Auto-Category Rules</div>
-          <button class="btn-ghost btn-sm" onclick="addAutoCatRule()">+ Rule</button>
-        </div>
-        <div style="font-size:9px;color:var(--mut);margin-bottom:10px">Keyword matches in transaction descriptions auto-assign categories during import.</div>
-        ${S.autoCatRules.map((r,i)=>{
-          const cat=catById[r.category]||CATS[CATS.length-1];
-          return'<div class="flex" style="justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bdr)">'
-            +'<span style="font-size:11px">"'+r.keyword+'" → <span style="color:'+cat.color+'">'+cat.icon+' '+cat.label+'</span></span>'
-            +'<button class="btn-sm btn-red" onclick="S.autoCatRules.splice('+i+',1);save(\'autoCatRules\');renderTransactions()">✕</button></div>';
-        }).join('')}
-      </div>
     </div>`;
     return;
   }
@@ -4627,122 +4565,56 @@ function renderTransactions(){
     return;
   }
 
-  if(w.step==='filter'){
-    const rows=w.parsedRows;
-    const types=[...new Set(rows.map(r=>r.type).filter(Boolean))];
-    const counts={};
-    for(const r of rows)counts[r.type||'unknown']=(counts[r.type||'unknown']||0)+1;
-    const filtered=rows.filter(r=>w.filterTypes.length===0||w.filterTypes.includes(r.type));
+  if(w.step==='summary'){
+    const newTxns=w.parsedRows;
+    const bycat={};
+    for(const t of newTxns)bycat[t.category]=(bycat[t.category]||0)+1;
+    const spend=newTxns.filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+    const income=newTxns.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
 
     content.innerHTML=`<div class="page">
-      <div class="label">Step 2 — Filter Transactions</div>
-      <div style="font-size:10px;color:var(--mut);margin-bottom:16px">Select which transaction types to import. Usually you want Purchases and Direct Debits for expense tracking.</div>
-
-      <div class="card bdr-l mb16">
-        <div class="label2 mb10">Transaction Types Found</div>
-        ${types.map(t=>{
-          const active=w.filterTypes.includes(t);
-          return`<div class="flex" style="align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bdr)">
-            <div><div style="font-size:12px;text-transform:capitalize">${t}</div>
-            <div style="font-size:9px;color:var(--mut)">${counts[t]||0} transactions</div></div>
-            <button class="toggle ${active?'on':'off'}" onclick="toggleTxType('${t}')"></button>
-          </div>`;
-        }).join('')}
-      </div>
-
-      <div style="font-size:10px;color:var(--mut);margin-bottom:14px">${filtered.length} transactions selected for review</div>
-      <div class="flex gap8">
-        <button class="btn-acc f1" onclick="startTxReview()">Review ${filtered.length} Transactions →</button>
-        <button class="btn-ghost" onclick="_txWizard.step='import';renderTransactions()">Cancel</button>
-      </div>
-    </div>`;
-    return;
-  }
-
-  if(w.step==='review'){
-    const pending=w.pendingTxns;
-    const idx=w.reviewIdx;
-    if(idx>=pending.length){
-      _txWizard.step='confirm';
-      renderTransactions();
-      return;
-    }
-    const tx=pending[idx];
-    const cat=catById[tx.category]||CATS[CATS.length-1];
-    const progress=Math.round((idx/pending.length)*100);
-
-    content.innerHTML=`<div class="page">
-      <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div class="label" style="margin:0">Step 3 — Review & Categorize</div>
-        <div style="font-size:9px;color:var(--mut)">${idx+1} of ${pending.length}</div>
-      </div>
-      <div class="prog mb16"><div class="prog-fill" style="width:${progress}%;background:var(--acc)"></div></div>
-
-      <div class="card mb14" style="border-left:3px solid ${cat.color}">
-        <div style="font-size:9px;color:var(--mut);margin-bottom:4px">${tx.date}</div>
-        <div style="font-size:16px;font-weight:bold;margin-bottom:6px">${tx.description}</div>
-        <div style="font-size:24px;font-weight:bold;color:${tx.amount<0?'var(--red)':'var(--grn)'}">
-          ${fmt$(tx.amount,true)}
+      <div class="label">Import Complete</div>
+      <div class="card accent-l mb20">
+        <div style="font-size:28px;font-weight:bold;color:var(--acc)">${newTxns.length}</div>
+        <div style="font-size:10px;color:var(--mut);margin-top:4px">transactions imported</div>
+        <div class="flex gap8 mt10" style="justify-content:center">
+          <div style="font-size:11px;color:var(--red)">−${fmt$(spend)} spent</div>
+          <div style="font-size:11px;color:var(--mut)">·</div>
+          <div style="font-size:11px;color:var(--grn)">+${fmt$(income)} received</div>
         </div>
       </div>
 
-      <div class="label2 mb8">Category</div>
-      <div class="chips mb16">
-        ${CATS.map(c=>`<button class="chip${tx.category===c.id?' active':''}"
-          style="${tx.category===c.id?'border-color:'+c.color+';background:'+c.color+'22;color:'+c.color:'color:var(--mut)'}"
-          onclick="setTxCat('${c.id}')">${c.icon} ${c.label}</button>`).join('')}
-      </div>
-
-      <div class="flex gap8 mt4">
-        <button class="btn-ghost btn-sm" onclick="skipTx()">Skip</button>
-        <button class="btn-acc f1" onclick="confirmTx()">Confirm → </button>
-      </div>
-      <div style="margin-top:12px;text-align:center">
-        <button style="font-size:9px;color:var(--mut);background:none;border:none;cursor:pointer" onclick="confirmAllRemaining()">Confirm all remaining with suggested categories</button>
-      </div>
-    </div>`;
-    return;
-  }
-
-  if(w.step==='confirm'){
-    const approved=w.pendingTxns.filter(t=>t._confirmed);
-    const bycat={};
-    for(const t of approved)bycat[t.category]=(bycat[t.category]||0)+1;
-
-    content.innerHTML=`<div class="page">
-      <div class="label">Step 4 — Import Summary</div>
-      <div class="card accent-l mb20">
-        <div style="font-size:28px;font-weight:bold;color:var(--acc)">${approved.length}</div>
-        <div style="font-size:10px;color:var(--mut);margin-top:4px">transactions ready to import</div>
-      </div>
-
       <div class="label2 mb10">By Category</div>
-      ${Object.entries(bycat).map(([catId,count])=>{
+      ${Object.entries(bycat).sort((a,b)=>b[1]-a[1]).map(([catId,count])=>{
         const cat=catById[catId]||CATS[CATS.length-1];
-        return`<div class="flex" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr)">
-          <span style="font-size:11px"><span style="color:${cat.color}">${cat.icon}</span> ${cat.label}</span>
-          <span style="font-size:11px;color:var(--mut)">${count}</span>
-        </div>`;
+        return'<div class="flex" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr)">'
+          +'<span style="font-size:11px"><span style="color:'+cat.color+'">'+cat.icon+'</span> '+cat.label+'</span>'
+          +'<span style="font-size:11px;color:var(--mut)">'+count+'</span></div>';
       }).join('')}
 
       <div class="flex gap8 mt20">
-        <button class="btn-acc f1" onclick="importTxns()">⬇ Import All</button>
-        <button class="btn-ghost" onclick="_txWizard.step='review';_txWizard.reviewIdx=0;renderTransactions()">← Back to Review</button>
+        <button class="btn-acc f1" onclick="_txWizard.step='import';_txWizard.parsedRows=[];renderTransactions()">Done</button>
+        <button class="btn-ghost" onclick="_txWizard.step='history';renderTransactions()">View All</button>
       </div>
     </div>`;
     return;
   }
 }
 
-function handleTxFile(e){
-  const file=e.target.files[0];if(!file)return;
-  _txWizard.fileName=file.name;
-  const reader=new FileReader();
-  reader.onload=ev=>{
-    _txWizard.rawText=ev.target.result;
-    processTxRaw();
-  };
-  reader.readAsText(file);
+function copyTxPrompt(){
+  navigator.clipboard.writeText(TX_IMPORT_PROMPT).then(()=>{
+    const btn=document.getElementById('copy-prompt-btn');
+    if(btn){btn.textContent='✓ Copied!';setTimeout(()=>{btn.textContent='📋 Copy Prompt to Clipboard';},2000);}
+  }).catch(()=>{
+    // Fallback: show prompt in a textarea for manual copy
+    const ta=document.createElement('textarea');
+    ta.value=TX_IMPORT_PROMPT;ta.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;font-size:11px;padding:16px';
+    document.body.appendChild(ta);ta.select();
+    const close=document.createElement('button');
+    close.textContent='✕ Close';close.style.cssText='position:fixed;top:8px;right:8px;z-index:10000;padding:8px 16px;background:var(--acc);color:#000;border:none;border-radius:8px;font-size:12px';
+    close.onclick=()=>{ta.remove();close.remove();};
+    document.body.appendChild(close);
+  });
 }
 
 function handleTxPaste(){
@@ -4755,89 +4627,40 @@ function handleTxPaste(){
 function processTxRaw(){
   const rows=parseImportText(_txWizard.rawText);
   if(!rows.length){
-    alert('Could not parse any transactions. Make sure each line has a date (MM/DD/YYYY) and a dollar amount (e.g. -$30.77).');
+    alert('Could not parse any transactions. Make sure the AI output has one transaction per line in this format:\n\nYYYY-MM-DD|amount|category|description\n\nExample:\n2026-02-01|-16.71|transport|Shell');
     return;
   }
-  _txWizard.parsedRows=rows;
-  // Default: include purchases, direct debits, AND deposits/income — exclude only transfers/adjustments
-  const types=[...new Set(rows.map(r=>r.type))];
-  const expenseTypes=['purchase','direct debit','cash bonus','deposit','direct deposit'];
-  _txWizard.filterTypes=types.filter(t=>expenseTypes.includes(t.toLowerCase()));
-  if(!_txWizard.filterTypes.length)_txWizard.filterTypes=[...types]; // if nothing matches, show all
-  _txWizard.step='filter';
-  renderTransactions();
-}
 
-function toggleTxType(t){
-  const idx=_txWizard.filterTypes.indexOf(t);
-  if(idx>=0)_txWizard.filterTypes.splice(idx,1);
-  else _txWizard.filterTypes.push(t);
-  renderTransactions();
-}
-
-function startTxReview(){
-  const filtered=_txWizard.parsedRows.filter(r=>(_txWizard.filterTypes.length===0||_txWizard.filterTypes.includes(r.type))&&r.amount!==0);
-  _txWizard.pendingTxns=filtered.map(r=>({
-    ...r,
-    id:Date.now().toString()+Math.random().toString(36).slice(2),
-    category:autoCategorizeTx(r.description),
-    _confirmed:false,
-    imported:true,
-    source:_txWizard.fileName||'paste',
-  }));
-  _txWizard.reviewIdx=0;
-  _txWizard.step='review';
-  renderTransactions();
-}
-
-function setTxCat(catId){
-  _txWizard.pendingTxns[_txWizard.reviewIdx].category=catId;
-  renderTransactions();
-}
-
-function confirmTx(){
-  _txWizard.pendingTxns[_txWizard.reviewIdx]._confirmed=true;
-  _txWizard.reviewIdx++;
-  renderTransactions();
-}
-
-function skipTx(){
-  _txWizard.reviewIdx++;
-  renderTransactions();
-}
-
-function confirmAllRemaining(){
-  for(let i=_txWizard.reviewIdx;i<_txWizard.pendingTxns.length;i++){
-    _txWizard.pendingTxns[i]._confirmed=true;
-  }
-  _txWizard.step='confirm';
-  renderTransactions();
-}
-
-function importTxns(){
-  const approved=_txWizard.pendingTxns.filter(t=>t._confirmed).map(t=>{
-    const{_confirmed,...rest}=t;return rest;
-  });
-  // Avoid duplicates by checking date+amount+description
+  // Deduplicate against existing transactions
   const existing=new Set(S.transactions.map(t=>t.date+'|'+t.amount+'|'+t.description));
-  const newOnes=approved.filter(t=>!existing.has(t.date+'|'+t.amount+'|'+t.description));
-  S.transactions=[...S.transactions,...newOnes];
+  const newOnes=rows.filter(r=>!existing.has(r.date+'|'+r.amount+'|'+r.description));
+
+  if(!newOnes.length){
+    alert('All '+rows.length+' transactions are already imported (duplicates detected).');
+    return;
+  }
+
+  // Build transaction objects and import directly
+  const txns=newOnes.map(r=>({
+    id:Date.now().toString()+Math.random().toString(36).slice(2,8),
+    date:r.date,
+    description:r.description,
+    amount:r.amount,
+    category:r.category,
+    type:r.type,
+    imported:true,
+    source:'ai-import',
+  }));
+
+  S.transactions=[...S.transactions,...txns];
   save('transactions');
-  _txWizard={step:'import',rawText:'',parsedRows:[],colMap:{date:0,desc:1,amount:3,type:2},filterTypes:['purchase','direct debit'],reviewIdx:0,pendingTxns:[],fileName:''};
+
+  _txWizard.parsedRows=txns;
+  _txWizard.step='summary';
   renderTransactions();
 }
 
 function delTx(id){S.transactions=S.transactions.filter(t=>t.id!==id);save('transactions');renderTransactions();}
-
-function addAutoCatRule(){
-  const keyword=prompt('Keyword to match in description (e.g. "Starbucks"):');
-  if(!keyword)return;
-  const catLabels=CATS.map((c,i)=>i+': '+c.label).join(', ');
-  const catIdx=parseInt(prompt('Category number:\n'+catLabels));
-  if(isNaN(catIdx)||catIdx<0||catIdx>=CATS.length)return;
-  S.autoCatRules=[...S.autoCatRules,{id:Date.now().toString(),keyword,category:CATS[catIdx].id}];
-  save('autoCatRules');renderTransactions();
-}
 
 // ─── Data Panel ───────────────────────────────────────────────────────────────
 function toggleDataPanel(){
