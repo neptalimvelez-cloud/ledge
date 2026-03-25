@@ -4955,8 +4955,10 @@ if('serviceWorker' in navigator){
     var h=isStandalone?screen.height:window.innerHeight;
     // Set --app-h for any CSS that needs it
     document.documentElement.style.setProperty('--app-h',h+'px');
-    // Force height on key fixed containers
-    ['app','app-outer','splash','pin-overlay'].forEach(function(id){
+    // Force height on key fixed containers (but NOT #app — it uses
+    // top:0;bottom:0 positioning so CSS handles it correctly, and
+    // an explicit height would conflict with its padding-top safe area)
+    ['app-outer','splash','pin-overlay'].forEach(function(id){
       var el=document.getElementById(id);
       if(el)el.style.height=h+'px';
     });
