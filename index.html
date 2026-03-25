@@ -142,20 +142,19 @@ body::before{
 }
 
 /* ── Scroll content ─────────────────────────────────── */
-#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:none;padding-bottom:64px}
+#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:none;padding-bottom:0}
 #content::-webkit-scrollbar{display:none}
 
 /* ── Bottom Nav ─────────────────────────────────────── */
 #bottom-nav{
   display:flex;flex-direction:column;
-  background:rgba(8,10,20,0.55);
+  background:rgba(8,10,20,0.85);
   backdrop-filter:blur(28px) saturate(180%);
   -webkit-backdrop-filter:blur(28px) saturate(180%);
   border-top:1px solid var(--bdr);
-  position:fixed;
-  bottom:0;left:50%;
-  transform:translateX(-50%);
-  width:100%;max-width:560px;
+  flex-shrink:0;
+  position:relative;
+  width:100%;
   z-index:9999;
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
@@ -250,7 +249,7 @@ body::before{
 /* ── Toast ──────────────────────────────────────────── */
 #save-toast{
   position:fixed;left:50%;transform:translateX(-50%);
-  bottom:72px;
+  bottom:calc(72px + env(safe-area-inset-bottom,0px));
   background:rgba(93,232,160,0.12);
   backdrop-filter:var(--glass-blur-sm);
   -webkit-backdrop-filter:var(--glass-blur-sm);
@@ -620,7 +619,7 @@ button{
 /* ── Data panel ─────────────────────────────────────── */
 #data-panel{
   position:fixed;
-  bottom:60px;
+  bottom:calc(60px + env(safe-area-inset-bottom,0px));
   left:50%;transform:translateX(-50%);
   width:100%;max-width:560px;
   background:rgba(10,12,22,0.92);
