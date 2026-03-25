@@ -150,8 +150,11 @@ body::before{
   display:flex;flex-direction:column;
   background:#080a14;
   border-top:1px solid var(--bdr);
-  flex-shrink:0;
-  position:relative;z-index:9999;
+  position:fixed;
+  bottom:0;left:50%;
+  transform:translateX(-50%);
+  width:100%;max-width:560px;
+  z-index:9999;
 }
 #bottom-nav::before{
   content:'';position:absolute;top:0;left:0;right:0;height:1px;
@@ -807,8 +810,8 @@ button{
   </div>
   <div id="hdr-area"></div>
   <div id="content"></div>
-  <div id="bottom-nav"></div>
 </div></div>
+<div id="bottom-nav"></div>
 
 <div id="save-toast"><span class="toast-dot"></span><span id="toast-msg">SAVED</span></div>
 <div id="data-panel">
@@ -4933,26 +4936,16 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(function(){});
 }
 
-// iOS viewport fix: ensure the app fills to the physical bottom edge.
-// In standalone (home-screen) mode, use screen.height so we extend behind
-// the home indicator. In Safari, use innerHeight to respect the URL bar.
-// The CSS safe-area padding on #app handles the notch/dynamic island offset,
-// so we do NOT add extra height — we just set the container to fill exactly.
+// iOS viewport fix: force screen.height so the app fills to the physical
+// bottom edge. Always treat as full-bleed — ignore Safari chrome.
 (function fixViewport(){
   var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||
     (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   if(!isIOS)return;
-  // Add class so CSS can target iOS-only rules
   document.documentElement.classList.add('ios');
-  var isStandalone=window.navigator.standalone===true||
-    window.matchMedia('(display-mode:standalone)').matches;
   function set(){
-    // In standalone mode, use screen.height for full-bleed.
-    // In Safari, use innerHeight so we don't extend past the visible viewport.
-    var h=isStandalone?screen.height:window.innerHeight;
-    // Set --app-h for any CSS that needs it
+    var h=screen.height;
     document.documentElement.style.setProperty('--app-h',h+'px');
-    // Force height on key fixed containers
     ['app','app-outer','splash','pin-overlay'].forEach(function(id){
       var el=document.getElementById(id);
       if(el)el.style.height=h+'px';
