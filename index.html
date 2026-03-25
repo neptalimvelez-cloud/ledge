@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ledge">
 <meta name="theme-color" content="#0d0d0f">
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiTGVkZ2UiLCJzaG9ydF9uYW1lIjoiTGVkZ2UiLCJzdGFydF91cmwiOiIuIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzA3MDgwZiIsInRoZW1lX2NvbG9yIjoiIzBkMGQwZiJ9">
 <title>Ledge</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@300;400;500&display=swap');
@@ -66,10 +67,13 @@
 
 html{
   height: -webkit-fill-available;
+  height: 100dvh;
   height: 100%;
+  background:#07080f;
 }
 body{
   height: -webkit-fill-available;
+  height: 100dvh;
   height: 100%;
   background:var(--bg);
   overflow:hidden;
@@ -82,6 +86,8 @@ body{
 body::before{
   content:'';
   position:fixed;top:0;left:0;right:0;bottom:0;
+  height:100dvh;
+  height:-webkit-fill-available;
   z-index:0;
   background:
     radial-gradient(ellipse 80% 60% at 20% 10%, rgba(80,120,255,0.18) 0%, transparent 60%),
@@ -97,6 +103,7 @@ body::before{
   background:transparent;
   z-index:1;
   min-height:-webkit-fill-available;
+  min-height:100dvh;
 }
 
 #app{
@@ -107,6 +114,7 @@ body::before{
   width:100%;max-width:560px;
   bottom:0;
   min-height:-webkit-fill-available;
+  min-height:100dvh;
   overflow:hidden;
   padding-top:env(safe-area-inset-top,0px);
 }
@@ -155,6 +163,7 @@ body::before{
   border-top:1px solid var(--bdr);
   flex-shrink:0;
   position:relative;z-index:10;
+  padding-bottom:env(safe-area-inset-bottom,0px);
 }
 #bottom-nav::before{
   content:'';position:absolute;top:0;left:0;right:0;height:1px;
@@ -182,6 +191,9 @@ body::before{
 /* ── Splash ─────────────────────────────────────────── */
 #splash{
   position:fixed;top:0;left:0;right:0;bottom:0;
+  height:100dvh;
+  height:-webkit-fill-available;
+  height:var(--app-h,100dvh);
   z-index:99998;
   background:linear-gradient(160deg,#07080f,#0b0d1a);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
@@ -202,11 +214,16 @@ body::before{
 /* ── PIN overlay ────────────────────────────────────── */
 #pin-overlay{
   position:fixed;top:0;left:0;right:0;bottom:0;
+  height:100dvh;
+  height:-webkit-fill-available;
+  height:var(--app-h,100dvh);
   background:linear-gradient(160deg,rgba(7,8,15,0.96),rgba(11,13,26,0.98));
   backdrop-filter:blur(40px);
   -webkit-backdrop-filter:blur(40px);
   z-index:9999;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  padding-top:env(safe-area-inset-top,0px);
   font-family:'DM Sans',sans-serif;
 }
 #pin-overlay.hidden{display:none}
@@ -4929,6 +4946,18 @@ function importJSON(){
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+// iOS 26 viewport fix: set --app-h from outerHeight so fixed elements extend fully
+(function fixViewport(){
+  function set(){
+    var h=window.outerHeight||window.innerHeight;
+    document.documentElement.style.setProperty('--app-h',h+'px');
+  }
+  set();
+  window.addEventListener('resize',set);
+  // Also re-check after orientation change settles
+  window.addEventListener('orientationchange',function(){setTimeout(set,150);});
+})();
+
 // Show splash, load, then fade out
 document.getElementById('splash-msg').textContent='Loading…';
 setTimeout(()=>{
