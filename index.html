@@ -105,7 +105,7 @@ body::before{
   top:0;left:50%;
   transform:translateX(-50%);
   width:100%;max-width:560px;
-  bottom:0;
+  height:100dvh;height:100vh;
   overflow:hidden;
   padding-top:env(safe-area-inset-top,0px);
 }
@@ -150,11 +150,9 @@ body::before{
   display:flex;flex-direction:column;
   background:#080a14;
   border-top:1px solid var(--bdr);
-  position:fixed;
-  bottom:0;left:50%;
-  transform:translateX(-50%);
-  width:100%;max-width:560px;
-  z-index:9999;
+  flex-shrink:0;
+  margin-top:auto;
+  position:relative;z-index:9999;
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
 #bottom-nav::before{
@@ -811,8 +809,8 @@ button{
   </div>
   <div id="hdr-area"></div>
   <div id="content"></div>
+  <div id="bottom-nav"></div>
 </div></div>
-<div id="bottom-nav"></div>
 
 <div id="save-toast"><span class="toast-dot"></span><span id="toast-msg">SAVED</span></div>
 <div id="data-panel">
@@ -4947,7 +4945,7 @@ if('serviceWorker' in navigator){
   function set(){
     var h=screen.height;
     document.documentElement.style.setProperty('--app-h',h+'px');
-    ['app','app-outer','splash','pin-overlay'].forEach(function(id){
+    ['app-outer','splash','pin-overlay'].forEach(function(id){
       var el=document.getElementById(id);
       if(el)el.style.height=h+'px';
     });
