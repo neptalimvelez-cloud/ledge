@@ -1584,9 +1584,15 @@ function renderTrackerTab(now,rate,ws,wk){
     ${(()=>{
       const payD=payDateForWeek(wk);
       const today=new Date();today.setHours(0,0,0,0);
+      // Collect debt IDs to exclude auto-expenses linked to debts (they show via upDebt instead)
+      const debtIds=new Set(S.debts.map(d=>d.id));
       const upcoming=S.expenses.filter(e=>{
         if(e.active===false||e.archived||e.paid)return false;
+        // Skip auto-created debt-linked expenses (shown via debts below)
+        if(e._debtId&&debtIds.has(e._debtId))return false;
         if(e.frequency==='one-time'&&e.oneTimeDate){const d=parseLocal(e.oneTimeDate);return d>=today&&d<=payD;}
+        if(e.frequency==='weekly'){return true;} // always due within a pay period
+        if(e.frequency==='biweekly'){return true;} // likely due within window
         if(e.dayOfMonth){const dom=parseInt(e.dayOfMonth);for(let i=0;i<14;i++){const dd=new Date(today);dd.setDate(dd.getDate()+i);if(dd>payD)break;if(dd.getDate()===dom)return true;}return false;}
         return false;
       });
