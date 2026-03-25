@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ledge">
-<meta name="theme-color" content="#0d0d0f">
+<meta name="theme-color" content="#080a14">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Ledge</title>
@@ -68,11 +68,11 @@
 
 html{
   height: 100%;
-  background:#07080f;
+  background:#080a14;
 }
 body{
   height: 100%;
-  background:var(--bg);
+  background:#080a14;
   overflow:hidden;
   font-family:'DM Sans',system-ui,-apple-system,sans-serif;
   color:var(--txt);
@@ -142,17 +142,22 @@ body::before{
 }
 
 /* ── Scroll content ─────────────────────────────────── */
-#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:none}
+#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:none;padding-bottom:64px}
 #content::-webkit-scrollbar{display:none}
 
 /* ── Bottom Nav ─────────────────────────────────────── */
 #bottom-nav{
   display:flex;flex-direction:column;
-  background:#080a14;
+  background:rgba(8,10,20,0.55);
+  backdrop-filter:blur(28px) saturate(180%);
+  -webkit-backdrop-filter:blur(28px) saturate(180%);
   border-top:1px solid var(--bdr);
-  flex-shrink:0;
-  margin-top:auto;
-  position:relative;z-index:9999;
+  position:fixed;
+  bottom:0;left:50%;
+  transform:translateX(-50%);
+  width:100%;max-width:560px;
+  z-index:9999;
+  padding-bottom:env(safe-area-inset-bottom,0px);
 }
 #bottom-nav::before{
   content:'';position:absolute;top:0;left:0;right:0;height:1px;
