@@ -66,12 +66,10 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
 html{
-  height: 100vh;
   height: 100%;
   background:#07080f;
 }
 body{
-  height: 100vh;
   height: 100%;
   background:var(--bg);
   overflow:hidden;
@@ -84,7 +82,6 @@ body{
 body::before{
   content:'';
   position:fixed;top:0;left:0;right:0;bottom:0;
-  height:var(--app-h,100vh);
   z-index:0;
   background:
     radial-gradient(ellipse 80% 60% at 20% 10%, rgba(80,120,255,0.18) 0%, transparent 60%),
@@ -99,7 +96,6 @@ body::before{
   display:flex;align-items:stretch;justify-content:center;
   background:transparent;
   z-index:1;
-  height:var(--app-h,100vh);
 }
 
 #app{
@@ -109,7 +105,6 @@ body::before{
   transform:translateX(-50%);
   width:100%;max-width:560px;
   bottom:0;
-  height:var(--app-h,100vh);
   overflow:hidden;
   padding-top:env(safe-area-inset-top,0px);
 }
@@ -158,7 +153,6 @@ body::before{
   border-top:1px solid var(--bdr);
   flex-shrink:0;
   position:relative;z-index:10;
-  padding-bottom:env(safe-area-inset-bottom,0px);
 }
 #bottom-nav::before{
   content:'';position:absolute;top:0;left:0;right:0;height:1px;
@@ -186,7 +180,6 @@ body::before{
 /* ── Splash ─────────────────────────────────────────── */
 #splash{
   position:fixed;top:0;left:0;right:0;bottom:0;
-  height:var(--app-h,100vh);
   z-index:99998;
   background:linear-gradient(160deg,#07080f,#0b0d1a);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
@@ -207,7 +200,6 @@ body::before{
 /* ── PIN overlay ────────────────────────────────────── */
 #pin-overlay{
   position:fixed;top:0;left:0;right:0;bottom:0;
-  height:var(--app-h,100vh);
   background:linear-gradient(160deg,rgba(7,8,15,0.96),rgba(11,13,26,0.98));
   backdrop-filter:blur(40px);
   -webkit-backdrop-filter:blur(40px);
@@ -4937,12 +4929,27 @@ function importJSON(){
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
-// iOS 26 viewport fix: use screen.height to fill the physical screen,
-// pretending the Safari URL bar doesn't exist.
+// iOS 26 viewport fix: force screen.height so the app fills to the physical
+// bottom edge, ignoring Safari's URL bar. On Android, do nothing — default layout works.
 (function fixViewport(){
+  var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||
+    (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(!isIOS)return;
+  // Add class so CSS can target iOS-only rules
+  document.documentElement.classList.add('ios');
   function set(){
     var h=screen.height;
+    // Set --app-h for any CSS that needs it
     document.documentElement.style.setProperty('--app-h',h+'px');
+    // Force height on key fixed containers
+    ['app','app-outer','splash','pin-overlay'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el)el.style.height=h+'px';
+    });
+    document.body.style.height=h+'px';
+    // Bottom nav safe area padding
+    var bn=document.getElementById('bottom-nav');
+    if(bn)bn.style.paddingBottom='env(safe-area-inset-bottom,0px)';
   }
   set();
   window.addEventListener('resize',set);
