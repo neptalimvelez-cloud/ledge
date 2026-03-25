@@ -66,14 +66,12 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
 html{
-  height: -webkit-fill-available;
-  height: 100dvh;
+  height: 100vh;
   height: 100%;
   background:#07080f;
 }
 body{
-  height: -webkit-fill-available;
-  height: 100dvh;
+  height: 100vh;
   height: 100%;
   background:var(--bg);
   overflow:hidden;
@@ -86,8 +84,7 @@ body{
 body::before{
   content:'';
   position:fixed;top:0;left:0;right:0;bottom:0;
-  height:100dvh;
-  height:-webkit-fill-available;
+  height:var(--app-h,100vh);
   z-index:0;
   background:
     radial-gradient(ellipse 80% 60% at 20% 10%, rgba(80,120,255,0.18) 0%, transparent 60%),
@@ -102,8 +99,7 @@ body::before{
   display:flex;align-items:stretch;justify-content:center;
   background:transparent;
   z-index:1;
-  min-height:-webkit-fill-available;
-  min-height:100dvh;
+  height:var(--app-h,100vh);
 }
 
 #app{
@@ -113,8 +109,7 @@ body::before{
   transform:translateX(-50%);
   width:100%;max-width:560px;
   bottom:0;
-  min-height:-webkit-fill-available;
-  min-height:100dvh;
+  height:var(--app-h,100vh);
   overflow:hidden;
   padding-top:env(safe-area-inset-top,0px);
 }
@@ -191,9 +186,7 @@ body::before{
 /* ── Splash ─────────────────────────────────────────── */
 #splash{
   position:fixed;top:0;left:0;right:0;bottom:0;
-  height:100dvh;
-  height:-webkit-fill-available;
-  height:var(--app-h,100dvh);
+  height:var(--app-h,100vh);
   z-index:99998;
   background:linear-gradient(160deg,#07080f,#0b0d1a);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
@@ -214,9 +207,7 @@ body::before{
 /* ── PIN overlay ────────────────────────────────────── */
 #pin-overlay{
   position:fixed;top:0;left:0;right:0;bottom:0;
-  height:100dvh;
-  height:-webkit-fill-available;
-  height:var(--app-h,100dvh);
+  height:var(--app-h,100vh);
   background:linear-gradient(160deg,rgba(7,8,15,0.96),rgba(11,13,26,0.98));
   backdrop-filter:blur(40px);
   -webkit-backdrop-filter:blur(40px);
@@ -4946,15 +4937,15 @@ function importJSON(){
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
-// iOS 26 viewport fix: set --app-h from outerHeight so fixed elements extend fully
+// iOS 26 viewport fix: use screen.height to fill the physical screen,
+// pretending the Safari URL bar doesn't exist.
 (function fixViewport(){
   function set(){
-    var h=window.outerHeight||window.innerHeight;
+    var h=screen.height;
     document.documentElement.style.setProperty('--app-h',h+'px');
   }
   set();
   window.addEventListener('resize',set);
-  // Also re-check after orientation change settles
   window.addEventListener('orientationchange',function(){setTimeout(set,150);});
 })();
 
