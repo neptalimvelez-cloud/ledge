@@ -1100,8 +1100,6 @@ function getLiveEarned(){
   if(otMode==='week')return calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
   return calcEarnings(netSec,rate,oa,om);
 }
-let _liveEarned=0;
-setInterval(()=>{_liveEarned=getLiveEarned();},5000);
 function weekGross(dayMap,skipDk,liveSec,rate,otA,otM,otMode,csGrossAmt,coveredDays){
   // coveredDays: Set of dayKey strings replaced by custom shifts (no double-count)
   const extra=csGrossAmt||0;
@@ -1190,6 +1188,7 @@ function switchApp(app){
   document.getElementById('sw-tracker').classList.toggle('active',app==='tracker');
   document.getElementById('sw-budget').classList.toggle('active',app==='budget');
   document.getElementById('sw-worth').classList.toggle('active',app==='worth');
+  document.getElementById('sw-cal').classList.toggle('active',app==='cal');
   render();
 }
 
@@ -2590,7 +2589,6 @@ function renderBudget(){
   else if(tab==='save')renderSavingsChallenge();
   else if(tab==='debt')renderBudgetDebt();
   else if(tab==='transactions')renderTransactions();
-  else if(tab==='transactions')renderTransactions();
 }
 
 function renderBudgetHeader(){
@@ -3173,9 +3171,9 @@ function renderBudgetForecastCalOnly(){
   content.innerHTML=`<div class="page">
     ${legend}${legendToggle}
     <div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:12px">
-      <button class="btn-ghost btn-sm" onclick="calPrev();renderCalApp()">←</button>
+      <button class="btn-ghost btn-sm" onclick="calPrev()">←</button>
       <div style="font-size:12px;letter-spacing:2px">${MONTHS[mo].toUpperCase()} ${yr}</div>
-      <button class="btn-ghost btn-sm" onclick="calNext();renderCalApp()">→</button>
+      <button class="btn-ghost btn-sm" onclick="calNext()">→</button>
     </div>
     <div class="cal-grid" style="margin-bottom:4px">${['S','M','T','W','T','F','S'].map(d=>`<div style="text-align:center;font-size:8px;color:var(--mut);padding:4px 0">${d}</div>`).join('')}</div>
     <div class="cal-grid">${cells.map((day)=>{
@@ -4173,7 +4171,7 @@ function set401kAnchor(amount){
 }
 
 function sync401kAsset(balance){
-  if(!balance)return;
+  if(balance==null)return;
   const existing=S.assets.find(a=>a.id==='401k-auto'||a.label==='401(k)');
   if(existing){
     S.assets=S.assets.map(a=>(a.id==='401k-auto'||a.label==='401(k)')?{...a,value:String(balance),updatedDate:todayStr(),prevValue:a.value}:a);
@@ -4452,7 +4450,6 @@ function parseImportText(raw){
 
   // Free-text path (PDF paste, Chime-style, etc.)
   // Each line: DATE  DESCRIPTION  [MERCHANT_CODE]  TYPE  AMOUNT  AMOUNT  DATE
-  const TYPE_KWS=['Direct Debit','Cash Bonus','Purchase','Deposit','Transfer','Adjustment'];
 
   for(const line of lines){
     const dateRe=/^(\d{1,2}\/\d{1,2}\/\d{4})\s+/;
@@ -4905,14 +4902,27 @@ function exportJSON(){
 function exportCSV(){
   const rate=parseFloat(S.schedule.hourlyRate)||0,oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
   const rows=[['Week Start','Hours','Gross','Deductions','Est Net','Actual','Date Received','Variance']];
+  const seenWks=new Set();
   Object.entries(S.log).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([wk,dm])=>{
+    seenWks.add(wk);
     const sec=Object.values(dm).reduce((a,b)=>a+b,0);
     const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
-    const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg);
+    const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wk));
     const ded=g-applyDed(g,S.deductions),net=g-ded;
     const pc=S.paychecks[wk];
     rows.push([wk,(sec/3600).toFixed(2),g.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
   });
+  // Include weeks that only have custom shifts (no log entries)
+  for(const cs of S.customShifts){
+    const wk=localStr(getWeekStart(parseLocal(cs.date),S.schedule.weekStartDay,S.schedule.weekStartTime));
+    if(seenWks.has(wk))continue;
+    seenWks.add(wk);
+    const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
+    const ded=cg-applyDed(cg,S.deductions),net=cg-ded;
+    const pc=S.paychecks[wk];
+    rows.push([wk,'0.00',cg.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
+  }
+  rows.sort((a,b)=>a===rows[0]?-1:b===rows[0]?1:a[0].localeCompare(b[0]));
   const csv=rows.map(r=>r.join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv'});
   const url=URL.createObjectURL(blob);
