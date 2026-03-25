@@ -4935,25 +4935,11 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(function(){});
 }
 
-// iOS viewport fix: force screen.height so the app fills to the physical
-// bottom edge. Always treat as full-bleed — ignore Safari chrome.
-(function fixViewport(){
+// Add iOS class for CSS targeting
+(function(){
   var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||
     (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-  if(!isIOS)return;
-  document.documentElement.classList.add('ios');
-  function set(){
-    var h=screen.height;
-    document.documentElement.style.setProperty('--app-h',h+'px');
-    ['app-outer','splash','pin-overlay'].forEach(function(id){
-      var el=document.getElementById(id);
-      if(el)el.style.height=h+'px';
-    });
-    document.body.style.height=h+'px';
-  }
-  set();
-  window.addEventListener('resize',set);
-  window.addEventListener('orientationchange',function(){setTimeout(set,150);});
+  if(isIOS)document.documentElement.classList.add('ios');
 })();
 
 // Show splash, load, then fade out
