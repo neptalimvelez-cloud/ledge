@@ -1362,7 +1362,7 @@ function expMonthAmt(e,yr,mo){
 // ─── Routing ──────────────────────────────────────────────────────────────────
 const TRACKER_TABS=[{id:'tracker',icon:'◉',lbl:'Tracker'},{id:'history',icon:'▦',lbl:'History'},{id:'income',icon:'◈',lbl:'Income'},{id:'deductions',icon:'−$',lbl:'Deductions'},{id:'setup',icon:'⚙',lbl:'Setup'}];
 const BUDGET_TABS=[{id:'overview',icon:'▣',lbl:'Overview'},{id:'expenses',icon:'≡',lbl:'Expenses'},{id:'goals',icon:'◆',lbl:'Goals'},{id:'save',icon:'▲',lbl:'Save'},{id:'debt',icon:'$',lbl:'Debt'}];
-const CAL_TABS=[{id:'calendar',icon:'◈',lbl:'Calendar'},{id:'forecast',icon:'▦',lbl:'Forecast'},{id:'calhistory',icon:'≡',lbl:'History'}];
+const CAL_TABS=[{id:'calendar',icon:'◈',lbl:'Calendar'},{id:'forecast',icon:'▦',lbl:'Forecast'},{id:'calhistory',icon:'≡',lbl:'History'},{id:'badges',icon:'★',lbl:'Badges'}];
 const WORTH_TABS=[{id:'networth',icon:'◈',lbl:'Worth'},{id:'accounts',icon:'▣',lbl:'Accounts'},{id:'snapshots',icon:'▦',lbl:'History'},{id:'milestones',icon:'★',lbl:'Milestones'},{id:'retirement',icon:'◉',lbl:'Retire'}];
 
 function switchApp(app){
@@ -1384,94 +1384,121 @@ function setTab(tab){
 
 // ── Setup Wizard ──────────────────────────────────────────────────────────────
 let _wizStep=0;
-const WIZ_STEPS=['welcome','schedule','deductions','annual','theme','done'];
+const WIZ_STEPS=['welcome','tour_ledger','tour_budget','tour_networth','tour_calendar','schedule','deductions','annual','theme','done'];
 
 function shouldShowWizard(){
   if(S.wizardSeen)return false;
-  // Don't show if user already has data
   if(S.schedule.hourlyRate||Object.keys(S.log).length>0||S.expenses.length>0)return false;
   return true;
 }
-
-function openWizard(){
-  _wizStep=0;
-  document.getElementById('wizard-overlay').classList.remove('hidden');
-  renderWizard();
-}
-
-function closeWizard(){
-  document.getElementById('wizard-overlay').classList.add('hidden');
-  S.wizardSeen=true;save('wizardSeen');
-}
-
-function wizNext(){
-  // Save current step data before advancing
-  wizSaveStep();
-  _wizStep++;
-  if(_wizStep>=WIZ_STEPS.length){closeWizard();render();return;}
-  renderWizard();
-}
-
-function wizBack(){
-  wizSaveStep();
-  if(_wizStep>0)_wizStep--;
-  renderWizard();
-}
+function openWizard(){_wizStep=0;document.getElementById('wizard-overlay').classList.remove('hidden');renderWizard();}
+function closeWizard(){document.getElementById('wizard-overlay').classList.add('hidden');S.wizardSeen=true;save('wizardSeen');}
+function wizNext(){wizSaveStep();_wizStep++;if(_wizStep>=WIZ_STEPS.length){closeWizard();render();return;}renderWizard();}
+function wizBack(){wizSaveStep();if(_wizStep>0)_wizStep--;renderWizard();}
+function wizSkip(){closeWizard();render();}
 
 function wizSaveStep(){
   const step=WIZ_STEPS[_wizStep];
   if(step==='schedule'){
     const rate=document.getElementById('wiz-rate')?.value||'';
     const wsd=document.getElementById('wiz-wsd')?.value||'0';
-    S.schedule.hourlyRate=rate;
-    S.schedule.weekStartDay=wsd;
-    // Read day toggles
+    S.schedule.hourlyRate=rate;S.schedule.weekStartDay=wsd;
     for(let d=0;d<7;d++){
-      const cb=document.getElementById('wiz-day-'+d);
-      if(cb)S.schedule.shifts[d].active=cb.checked;
-      const st=document.getElementById('wiz-start-'+d);
-      const en=document.getElementById('wiz-end-'+d);
-      if(st)S.schedule.shifts[d].start=st.value;
-      if(en)S.schedule.shifts[d].end=en.value;
+      const cb=document.getElementById('wiz-day-'+d);if(cb)S.schedule.shifts[d].active=cb.checked;
+      const st=document.getElementById('wiz-start-'+d),en=document.getElementById('wiz-end-'+d);
+      if(st)S.schedule.shifts[d].start=st.value;if(en)S.schedule.shifts[d].end=en.value;
     }
     save('schedule');
   } else if(step==='deductions'){
-    const tax=document.getElementById('wiz-tax')?.value||'';
-    S.taxRate=tax;save('taxRate');
+    const tax=document.getElementById('wiz-tax')?.value||'';S.taxRate=tax;save('taxRate');
   } else if(step==='annual'){
-    const goal=document.getElementById('wiz-annual')?.value||'';
-    S.schedule.annualGoal=goal;save('schedule');
-  } else if(step==='theme'){
-    // Theme is applied live via setTheme/setAccent, nothing to save here
+    const goal=document.getElementById('wiz-annual')?.value||'';S.schedule.annualGoal=goal;save('schedule');
   }
 }
 
-function wizSkip(){
-  closeWizard();render();
+function wizFeatureCard(icon,title,desc,color){
+  return '<div style="display:flex;gap:12px;align-items:flex-start;padding:12px;background:var(--surf);border-left:2px solid '+color+';margin-bottom:8px;border-radius:0 var(--radius-xs) var(--radius-xs) 0">'
+    +'<div style="font-size:20px;flex-shrink:0">'+icon+'</div>'
+    +'<div><div style="font-size:12px;font-weight:600;color:var(--txt);margin-bottom:2px">'+title+'</div>'
+    +'<div style="font-size:10px;color:var(--mut);line-height:1.5">'+desc+'</div></div></div>';
 }
 
 function renderWizard(){
   const el=document.getElementById('wizard-content');
   const step=WIZ_STEPS[_wizStep];
   const DAYS_FULL=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-
-  // Progress dots
   let prog='<div class="wiz-progress">';
-  for(let i=0;i<WIZ_STEPS.length;i++){
-    prog+='<div class="wiz-dot'+(_wizStep>i?' done':_wizStep===i?' active':'')+'"></div>';
-  }
+  for(let i=0;i<WIZ_STEPS.length;i++){prog+='<div class="wiz-dot'+(_wizStep>i?' done':_wizStep===i?' active':'')+'"></div>';}
   prog+='</div>';
-
   let h='<div class="wiz-step">'+prog;
 
   if(step==='welcome'){
-    h+='<div style="text-align:center;padding-top:40px">';
-    h+='<div style="font-size:48px;margin-bottom:16px;filter:drop-shadow(0 0 20px var(--acc-glow))">◆</div>';
+    h+='<div style="text-align:center;padding-top:24px">';
+    h+='<div style="font-size:48px;margin-bottom:16px;filter:drop-shadow(0 0 20px var(--acc-glow))">\u25c6</div>';
     h+='<div class="wiz-title" style="font-size:26px">Welcome to Ledge</div>';
-    h+='<div class="wiz-sub" style="font-size:13px;max-width:300px;margin:12px auto 30px">Let\u2019s get your finances set up in under a minute.</div>';
-    h+='<button class="btn-acc" style="padding:14px 40px;font-size:12px" onclick="wizNext()">Get Started</button>';
-    h+='<div style="margin-top:16px"><button style="color:var(--mut);font-size:10px" onclick="wizSkip()">Skip setup</button></div>';
+    h+='<div class="wiz-sub" style="font-size:13px;max-width:300px;margin:12px auto 20px">Your all-in-one personal finance app. Let\u2019s take a quick tour, then get you set up.</div>';
+    h+='<div style="text-align:left;max-width:320px;margin:0 auto 24px">';
+    h+=wizFeatureCard('\u25c9','Ledger','Clock shifts, track overtime, see pay history','var(--acc)');
+    h+=wizFeatureCard('\u25a3','Budget','Expenses, savings goals, debt payoff','var(--grn)');
+    h+=wizFeatureCard('\u25c6','Net Worth','Accounts, snapshots, 401k, milestones','var(--blu)');
+    h+=wizFeatureCard('\u25c8','Calendar','Financial calendar, forecasts, badges','var(--pur)');
     h+='</div>';
+    h+='<button class="btn-acc" style="padding:14px 40px;font-size:12px" onclick="wizNext()">Start Tour</button>';
+    h+='<div style="margin-top:12px"><button style="color:var(--mut);font-size:10px" onclick="_wizStep=5;renderWizard()">Skip tour, go to setup</button></div>';
+    h+='<div style="margin-top:6px"><button style="color:var(--mut2);font-size:9px" onclick="wizSkip()">Skip everything</button></div>';
+    h+='</div>';
+  }
+
+  else if(step==='tour_ledger'){
+    h+='<div class="wiz-title">\u25c9 Ledger</div>';
+    h+='<div class="wiz-sub">Your shift-tracking command center.</div>';
+    h+=wizFeatureCard('\u25c9','Clock In / Out','Tap to start your shift. It auto-logs when your shift ends. Tracks breaks with quick-add buttons.','var(--acc)');
+    h+=wizFeatureCard('\u25a6','Pay History','Every week\u2019s hours, gross, deductions, and net. Compare your projected vs actual paychecks.','var(--acc)');
+    h+=wizFeatureCard('\u25c8','Side Income','Track freelance, gig work, or any extra earnings alongside your main job.','var(--acc)');
+    h+=wizFeatureCard('\u2212$','Deductions','Flat or percentage deductions per week. Includes a federal tax bracket estimator.','var(--acc)');
+    h+=wizFeatureCard('\u2699','Setup','Hourly rate, schedule, OT rules, break rules, theme, and data backup all live here.','var(--acc)');
+    h+='<div style="padding:10px;background:var(--accd);border-radius:var(--radius-xs);margin-top:12px;font-size:10px;color:var(--txt2);line-height:1.6">';
+    h+='<strong style="color:var(--acc)">Navigation:</strong> The left pill switches tabs within an app. The top bar switches between the 4 apps. The <strong>+</strong> button (bottom right) quick-adds shifts and expenses from anywhere.';
+    h+='</div>';
+    h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
+  }
+
+  else if(step==='tour_budget'){
+    h+='<div class="wiz-title">\u25a3 Budget</div>';
+    h+='<div class="wiz-sub">Track where your money goes.</div>';
+    h+=wizFeatureCard('\u25a3','Overview','Weekly and monthly surplus/deficit. Spending velocity chart. 6-month income vs expense trends.','var(--grn)');
+    h+=wizFeatureCard('\u2261','Expenses','Recurring and one-time expenses, sorted by due date. Set envelope limits per category. Mark as paid to auto-deduct from a linked account.','var(--grn)');
+    h+=wizFeatureCard('\u25c6','Goals','Savings goals with progress bars. Link a goal to an account and progress tracks automatically.','var(--grn)');
+    h+=wizFeatureCard('\u25b2','Save','52-week savings challenge. Link to a savings account and check off weeks as you go.','var(--grn)');
+    h+=wizFeatureCard('$','Debt','Track balances, interest rates, minimums. Snowball and avalanche payoff strategies with projected debt-free dates.','var(--grn)');
+    h+='<div style="padding:10px;background:var(--grnd);border-radius:var(--radius-xs);margin-top:12px;font-size:10px;color:var(--txt2);line-height:1.6">';
+    h+='<strong style="color:var(--grn)">Bank Import:</strong> Go to Expenses \u2192 Import, copy the AI prompt into ChatGPT or Claude with your bank statement, paste back the result. Transactions auto-categorize into 17 categories.';
+    h+='</div>';
+    h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
+  }
+
+  else if(step==='tour_networth'){
+    h+='<div class="wiz-title">\u25c6 Net Worth</div>';
+    h+='<div class="wiz-sub">See the big picture of your finances.</div>';
+    h+=wizFeatureCard('\u25c8','Worth','Total assets minus debts. Your overall financial position at a glance.','var(--blu)');
+    h+=wizFeatureCard('\u25a3','Accounts','Checking, savings, brokerage, 401k, Roth IRA, HSA, crypto. Set per-paycheck auto-contributions and balance anchors.','var(--blu)');
+    h+=wizFeatureCard('\u25a6','History','Take monthly snapshots to track net worth growth over time. See trends across months.','var(--blu)');
+    h+=wizFeatureCard('\u2605','Milestones','Set financial milestones ($1k saved, debt-free, $100k net worth). They auto-detect when reached.','var(--blu)');
+    h+=wizFeatureCard('\u25c9','Retire','401k contribution tracking with employer match formulas. Growth projections at different return rates.','var(--blu)');
+    h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
+  }
+
+  else if(step==='tour_calendar'){
+    h+='<div class="wiz-title">\u25c8 Calendar</div>';
+    h+='<div class="wiz-sub">Your financial schedule at a glance.</div>';
+    h+=wizFeatureCard('\u25c8','Calendar','Color-coded month view \u2014 blue for paydays, red for expenses, orange for debt, green for savings, purple for multiple events.','var(--pur)');
+    h+=wizFeatureCard('\u25a6','Forecast','4-week and 6-month projections. See upcoming bills, expected income, and projected balances.','var(--pur)');
+    h+=wizFeatureCard('\u2261','History','Monthly timeline of every financial event.','var(--pur)');
+    h+=wizFeatureCard('\u2605','Badges','20 achievement badges to unlock as you use the app \u2014 track shifts, hit savings goals, pay off debt, and more.','var(--pur)');
+    h+='<div style="padding:10px;background:var(--purd);border-radius:var(--radius-xs);margin-top:12px;font-size:10px;color:var(--txt2);line-height:1.6">';
+    h+='<strong style="color:var(--pur)">Privacy:</strong> All data stays on your device in localStorage. No accounts, no cloud, no tracking. Use Setup \u2192 Data to export JSON backups anytime.';
+    h+='</div>';
+    h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Let\u2019s set up</button></div>';
   }
 
   else if(step==='schedule'){
@@ -1482,9 +1509,7 @@ function renderWizard(){
     h+='<input id="wiz-rate" type="number" min="0" step=".25" placeholder="0.00" value="'+(S.schedule.hourlyRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
     h+='<div class="label mt14">Pay Week Starts</div>';
     h+='<select id="wiz-wsd" style="margin-bottom:14px">';
-    for(let i=0;i<7;i++){
-      h+='<option value="'+i+'"'+(parseInt(S.schedule.weekStartDay)===i?' selected':'')+'>'+DAYS_FULL[i]+'</option>';
-    }
+    for(let i=0;i<7;i++){h+='<option value="'+i+'"'+(parseInt(S.schedule.weekStartDay)===i?' selected':'')+'>'+DAYS_FULL[i]+'</option>';}
     h+='</select>';
     h+='<div class="label mt14">Work Days</div>';
     for(let d=0;d<7;d++){
@@ -1492,69 +1517,42 @@ function renderWizard(){
       h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;background:var(--surf);border-left:2px solid '+(sh.active?'var(--acc)':'var(--bdr)')+'">';
       h+='<input type="checkbox" id="wiz-day-'+d+'"'+(sh.active?' checked':'')+' style="width:18px;height:18px;accent-color:var(--acc)">';
       h+='<span style="width:35px;font-size:12px;font-weight:bold;color:'+(sh.active?'var(--acc)':'var(--mut)')+'">'+DAYS_FULL[d].slice(0,3)+'</span>';
-      if(sh.active){
-        h+='<input type="time" id="wiz-start-'+d+'" value="'+sh.start+'" style="flex:1;font-size:11px">';
-        h+='<span style="color:var(--mut);font-size:10px">to</span>';
-        h+='<input type="time" id="wiz-end-'+d+'" value="'+sh.end+'" style="flex:1;font-size:11px">';
-      }
+      if(sh.active){h+='<input type="time" id="wiz-start-'+d+'" value="'+sh.start+'" style="flex:1;font-size:11px"><span style="color:var(--mut);font-size:10px">to</span><input type="time" id="wiz-end-'+d+'" value="'+sh.end+'" style="flex:1;font-size:11px">';}
       h+='</div>';
     }
-    h+='<div class="wiz-nav">';
-    h+='<button class="btn-ghost" onclick="wizBack()">Back</button>';
-    h+='<button class="btn-acc" onclick="wizNext()">Next</button></div>';
+    h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
   }
 
   else if(step==='deductions'){
     h+='<div class="wiz-title">Tax Rate</div>';
     h+='<div class="wiz-sub">Set your estimated tax rate for take-home calculations. You can add detailed deductions later in Setup.</div>';
     h+='<div class="label">Estimated Tax %</div>';
-    h+='<div class="inp-row mb14"><input id="wiz-tax" type="number" min="0" max="60" step="0.5" placeholder="e.g. 22" value="'+(S.taxRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px">';
-    h+='<span style="padding:0 14px;color:var(--mut);font-size:20px">%</span></div>';
-    h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">Common ranges: 10-15% (low income), 18-25% (middle), 28-35% (higher). This is just an estimate.</div>';
-    h+='<div class="wiz-nav">';
-    h+='<button class="btn-ghost" onclick="wizBack()">Back</button>';
-    h+='<button class="btn-acc" onclick="wizNext()">Next</button></div>';
+    h+='<div class="inp-row mb14"><input id="wiz-tax" type="number" min="0" max="60" step="0.5" placeholder="e.g. 22" value="'+(S.taxRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"><span style="padding:0 14px;color:var(--mut);font-size:20px">%</span></div>';
+    h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">Common ranges: 10\u201315% (low income), 18\u201325% (middle), 28\u201335% (higher).</div>';
+    h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
   }
 
   else if(step==='annual'){
-    // Calculate projected annual based on schedule
     const rate=parseFloat(S.schedule.hourlyRate)||0;
     let wkHrs=0;
-    for(let d=0;d<7;d++){
-      const sh=S.schedule.shifts[d];
-      if(!sh.active)continue;
-      const sm=parseInt(sh.start.split(':')[0])*60+parseInt(sh.start.split(':')[1]||0);
-      const em=parseInt(sh.end.split(':')[0])*60+parseInt(sh.end.split(':')[1]||0);
-      const dur=em<sm?em+1440-sm:em-sm;
-      wkHrs+=dur/60;
-    }
-    const projGross=rate*wkHrs*52;
-    const taxPct=parseFloat(S.taxRate)||0;
-    const projNet=projGross*(1-taxPct/100);
-
+    for(let d=0;d<7;d++){const sh=S.schedule.shifts[d];if(!sh.active)continue;const sm=parseInt(sh.start.split(':')[0])*60+parseInt(sh.start.split(':')[1]||0);const em=parseInt(sh.end.split(':')[0])*60+parseInt(sh.end.split(':')[1]||0);const dur=em<sm?em+1440-sm:em-sm;wkHrs+=dur/60;}
+    const projGross=rate*wkHrs*52,taxPct=parseFloat(S.taxRate)||0,projNet=projGross*(1-taxPct/100);
     h+='<div class="wiz-title">Annual Goal</div>';
     h+='<div class="wiz-sub">Track progress toward a yearly earnings target.</div>';
-
     if(rate>0&&wkHrs>0){
       h+='<div class="card glass mb14" style="border-left:2px solid var(--acc)">';
       h+='<div style="font-size:8px;letter-spacing:2px;color:var(--mut);margin-bottom:6px">PROJECTED FROM YOUR SCHEDULE</div>';
       h+='<div style="font-size:11px;color:var(--txt);line-height:1.8">';
-      h+='<div>'+wkHrs.toFixed(1)+'h/wk × $'+rate.toFixed(2)+' × 52 weeks</div>';
+      h+='<div>'+wkHrs.toFixed(1)+'h/wk \u00d7 $'+rate.toFixed(2)+' \u00d7 52 weeks</div>';
       h+='<div style="font-size:18px;color:var(--acc);font-weight:300;margin:4px 0">'+fmt$(projGross)+' <span style="font-size:10px;color:var(--mut)">gross/yr</span></div>';
-      if(taxPct>0){
-        h+='<div style="font-size:12px;color:var(--grn)">'+fmt$(projNet)+' <span style="font-size:9px;color:var(--mut)">after '+taxPct+'% tax</span></div>';
-      }
+      if(taxPct>0){h+='<div style="font-size:12px;color:var(--grn)">'+fmt$(projNet)+' <span style="font-size:9px;color:var(--mut)">after '+taxPct+'% tax</span></div>';}
       h+='</div></div>';
-      h+='<button class="btn-ghost btn-sm mb14" style="width:100%;color:var(--acc)" onclick="document.getElementById(&quot;wiz-annual&quot;).value=&quot;'+Math.round(projNet||projGross)+'&quot;" >Use '+fmt$(Math.round(projNet||projGross))+' as my goal</button>';
+      h+='<button class="btn-ghost btn-sm mb14" style="width:100%;color:var(--acc)" onclick="document.getElementById(&quot;wiz-annual&quot;).value=&quot;'+Math.round(projNet||projGross)+'&quot;">Use '+fmt$(Math.round(projNet||projGross))+' as my goal</button>';
     }
-
     h+='<div class="label">Annual Earnings Goal</div>';
-    h+='<div class="inp-row mb14"><span class="pre" style="font-size:20px;color:var(--acc)">$</span>';
-    h+='<input id="wiz-annual" type="number" min="0" step="1000" placeholder="0" value="'+(S.schedule.annualGoal||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
-    h+='<div style="font-size:10px;color:var(--mut)">Shown in History > YTD as a progress bar. Leave blank to skip.</div>';
-    h+='<div class="wiz-nav">';
-    h+='<button class="btn-ghost" onclick="wizBack()">Back</button>';
-    h+='<button class="btn-acc" onclick="wizNext()">Next</button></div>';
+    h+='<div class="inp-row mb14"><span class="pre" style="font-size:20px;color:var(--acc)">$</span><input id="wiz-annual" type="number" min="0" step="1000" placeholder="0" value="'+(S.schedule.annualGoal||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
+    h+='<div style="font-size:10px;color:var(--mut)">Shown in History \u2192 YTD as a progress bar. Leave blank to skip.</div>';
+    h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
   }
 
   else if(step==='theme'){
@@ -1562,38 +1560,29 @@ function renderWizard(){
     h+='<div class="wiz-sub">Pick a theme and accent color.</div>';
     h+='<div class="label">Theme</div>';
     h+='<div class="flex gap8 mb16">';
-    var themes=[['midnight','\u{1f30c}','Midnight'],['amoled','\u25fc','AMOLED'],['light','\u2600','Light']];
-    for(var ti=0;ti<3;ti++){
-      // Use data attributes for clean JS
-    }
-    h+='</div>';
-    // Build theme buttons with simple onclick
-    h='<div class="wiz-step">'+prog;
-    h+='<div class="wiz-title">Appearance</div>';
-    h+='<div class="wiz-sub">Pick a theme and accent color.</div>';
-    h+='<div class="label">Theme</div>';
-    h+='<div class="flex gap8 mb16">';
-    var tmData=[['midnight','🌌','Midnight'],['amoled','◼','AMOLED'],['light','☀','Light']];
-    for(var ti=0;ti<tmData.length;ti++){
-      var tv=tmData[ti][0],tic=tmData[ti][1],tl=tmData[ti][2];
-      var tact=(S.theme||'midnight')===tv;
-      h+='<button style="flex:1;padding:12px 8px;text-align:center;border:1px solid '+(tact?'var(--acc)':'var(--bdr)')+';background:'+(tact?'var(--accd)':'transparent')+';color:'+(tact?'var(--acc)':'var(--mut)')+'" onclick="setTheme(&quot;'+tv+'&quot;);renderWizard()"><div style="font-size:18px;margin-bottom:4px">'+tic+'</div><div style="font-size:10px">'+tl+'</div></button>';
-    }
+    var tmData=[['midnight','\ud83c\udf0c','Midnight'],['amoled','\u25fc','AMOLED'],['light','\u2600','Light']];
+    for(var ti=0;ti<tmData.length;ti++){var tv=tmData[ti][0],tic=tmData[ti][1],tl=tmData[ti][2],tact=(S.theme||'midnight')===tv;
+      h+='<button style="flex:1;padding:12px 8px;text-align:center;border:1px solid '+(tact?'var(--acc)':'var(--bdr)')+';background:'+(tact?'var(--accd)':'transparent')+';color:'+(tact?'var(--acc)':'var(--mut)')+'" onclick="setTheme(&quot;'+tv+'&quot;);renderWizard()"><div style="font-size:18px;margin-bottom:4px">'+tic+'</div><div style="font-size:10px">'+tl+'</div></button>';}
     h+='</div>';
     h+='<div class="label">Accent Color</div>';
-    h+='<div class="flex" style="flex-wrap:wrap;gap:10px;margin-bottom:16px">';
-    // Will be filled by JS using ACCENT_PRESETS
-    h+='</div>';
-    h+='<div class="wiz-nav">';
-    h+='<button class="btn-ghost" onclick="wizBack()">Back</button>';
-    h+='<button class="btn-acc" onclick="wizNext()">Next</button></div>';
+    h+='<div class="flex" style="flex-wrap:wrap;gap:10px;margin-bottom:16px"></div>';
+    h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
   }
 
   else if(step==='done'){
-    h+='<div style="text-align:center;padding-top:50px">';
-    h+='<div style="font-size:48px;margin-bottom:16px">✓</div>';
+    h+='<div style="text-align:center;padding-top:24px">';
+    h+='<div style="font-size:48px;margin-bottom:16px">\u2713</div>';
     h+='<div class="wiz-title" style="font-size:24px;color:var(--grn)">You\u2019re All Set!</div>';
-    h+='<div class="wiz-sub" style="font-size:12px;margin:12px auto 30px;max-width:280px">Your schedule and preferences are saved. You can always adjust everything in Setup.</div>';
+    h+='<div class="wiz-sub" style="font-size:12px;margin:12px auto 20px;max-width:300px">Your schedule and preferences are saved. Adjust anything in Setup anytime.</div>';
+    h+='<div style="text-align:left;max-width:340px;margin:0 auto 24px;padding:14px;background:var(--surf);border-radius:var(--radius-sm);border:1px solid var(--bdr)">';
+    h+='<div style="font-size:9px;letter-spacing:2px;color:var(--mut);margin-bottom:8px">QUICK START</div>';
+    h+='<div style="font-size:11px;color:var(--txt);line-height:2">';
+    h+='<div>\u25c9 <strong>Clock in</strong> when your shift starts</div>';
+    h+='<div>\u25a3 <strong>Add expenses</strong> to track your budget</div>';
+    h+='<div>\u25c6 <strong>Add accounts</strong> for your net worth picture</div>';
+    h+='<div>\ud83d\udcf1 <strong>Add to Home Screen</strong> for a native app feel</div>';
+    h+='<div>\u2b50 <strong>Earn badges</strong> as you use features</div>';
+    h+='</div></div>';
     h+='<button class="btn-acc" style="padding:14px 40px;font-size:12px" onclick="wizNext()">Start Using Ledge</button>';
     h+='</div>';
   }
@@ -1601,17 +1590,12 @@ function renderWizard(){
   h+='</div>';
   el.innerHTML=h;
 
-  // If on theme step, build accent buttons after innerHTML is set
   if(step==='theme'){
-    const acWrap=el.querySelectorAll('.flex')[1]; // second flex is accent
-    if(acWrap){
-      let acH='';
-      for(const p of ACCENT_PRESETS){
-        const active=(!S.accentColor&&p.id==='default')||(S.accentColor===p.hex);
-        acH+='<button style="width:40px;height:40px;border-radius:50%;background:'+p.hex+';border:2px solid '+(active?'var(--txt)':'transparent')+';box-shadow:'+(active?'0 0 0 3px var(--accd),0 0 12px '+p.hex+'44':'none')+'" onclick="setAccent(&quot;'+(p.id==='default'?'':p.hex)+'&quot;);renderWizard()" title="'+p.label+'"></button>';
-      }
-      acWrap.innerHTML=acH;
-    }
+    const acWrap=el.querySelectorAll('.flex')[1];
+    if(acWrap){let acH='';
+      for(const p of ACCENT_PRESETS){const active=(!S.accentColor&&p.id==='default')||(S.accentColor===p.hex);
+        acH+='<button style="width:40px;height:40px;border-radius:50%;background:'+p.hex+';border:2px solid '+(active?'var(--txt)':'transparent')+';box-shadow:'+(active?'0 0 0 3px var(--accd),0 0 12px '+p.hex+'44':'none')+'" onclick="setAccent(&quot;'+(p.id==='default'?'':p.hex)+'&quot;);renderWizard()" title="'+p.label+'"></button>';}
+      acWrap.innerHTML=acH;}
   }
 }
 
@@ -2869,6 +2853,11 @@ function renderAchievements(){
   return h;
 }
 
+function renderBadgesTab(){
+  const content=document.getElementById('content');
+  content.innerHTML='<div class="page">'+renderAchievements()+'</div>';
+}
+
 // ── Tax Bracket Calculator ─────────────────────────────────────────────────
 function renderTaxBrackets(hourlyRate){
   const rate=hourlyRate||parseFloat(S.schedule.hourlyRate)||0;
@@ -3004,6 +2993,27 @@ function renderSetupTab(){
   const previewWs=getWeekStart(new Date(),e.weekStartDay||'0',e.weekStartTime||'00:00');
   const previewWe=wkEnd(previewWs);
   content.innerHTML=`<div class="page">
+    <!-- Setup Wizard -->
+    <div class="flex gap8 mb14">
+      <button class="btn-ghost f1" style="color:var(--acc);padding:12px" onclick="openWizard()">🔄 Run Setup Wizard</button>
+      <button onclick="toggleDataPanel()" style="font-size:9px;border:1px solid var(--bdr);color:var(--mut);padding:12px 14px">⊞ Data</button>
+    </div>
+
+    <!-- Theme & Accent -->
+    <div class="card mb20" style="border:1px solid var(--bdrh)">
+      <div class="label">Theme</div>
+      <div class="flex gap8 mb12">
+        ${[['midnight','\u{1f30c}','Midnight'],['amoled','\u25fc','AMOLED'],['light','\u2600','Light']].map(([v,ic,l])=>{const act=(S.theme||'midnight')===v;return'<button style="flex:1;padding:10px 8px;text-align:center;border:1px solid '+(act?'var(--acc)':'var(--bdr)')+';background:'+(act?'var(--accd)':'transparent')+';color:'+(act?'var(--acc)':'var(--mut)')+'" onclick="setTheme(&quot;'+v+'&quot;);renderSetupTab()"><div style="font-size:16px;margin-bottom:3px">'+ic+'</div><div style="font-size:9px;letter-spacing:1px">'+l+'</div></button>';}).join('')}
+      </div>
+      <div class="label">Accent Color</div>
+      <div class="flex" style="flex-wrap:wrap;gap:8px">
+        ${ACCENT_PRESETS.map(p=>{
+          const active=(!S.accentColor&&p.id==='default')||(S.accentColor===p.hex);
+          return '<button style="width:36px;height:36px;border-radius:50%;background:'+p.hex+';border:2px solid '+(active?'var(--txt)':'transparent')+';box-shadow:'+(active?'0 0 0 3px var(--accd),0 0 12px '+p.hex+'44':'none')+';transition:all 0.2s" onclick="setAccent(\''+((p.id==='default'?'':p.hex))+'\');renderSetupTab()" title="'+p.label+'"></button>';
+        }).join('')}
+      </div>
+    </div>
+
     <!-- Rate -->
     <div class="section">
       <div class="label">Hourly Rate (USD)</div>
@@ -3136,31 +3146,6 @@ function renderSetupTab(){
       <div class="flex gap8">
         <button class="btn-ghost f1" onclick="startSetPin()">Set New PIN</button>
         ${S.pin?`<button class="btn-ghost f1" style="color:var(--red)" onclick="clearPin()">Remove PIN</button>`:'<span style="flex:1;font-size:9px;color:var(--mut2);display:flex;align-items:center;padding-left:8px">No PIN set</span>'}
-      </div>
-    </div>
-
-    <!-- Achievements -->
-    <div class="card mt14" style="border:1px solid var(--bdrh)">
-      ${renderAchievements()}
-    </div>
-
-    <!-- Re-run Wizard -->
-    <div class="mt14" style="text-align:center">
-      <button class="btn-ghost btn-sm" style="color:var(--acc)" onclick="openWizard()">🔄 Re-run Setup Wizard</button>
-    </div>
-
-    <!-- Theme & Accent -->
-    <div class="card mt14" style="border:1px solid var(--bdrh)">
-      <div class="label">Theme</div>
-      <div class="flex gap8 mb12">
-        ${[['midnight','\u{1f30c}','Midnight'],['amoled','\u25fc','AMOLED'],['light','\u2600','Light']].map(([v,ic,l])=>'<button style="flex:1;padding:10px 8px;text-align:center;border:1px solid '+((S.theme||'midnight')===v?'var(--acc)':'var(--bdr)')+';background:'+((S.theme||'midnight')===v?'var(--accd)':'transparent')+';color:'+((S.theme||'midnight')===v?'var(--acc)':'var(--mut)')+'" onclick="setTheme(\''+v+'\');renderSetupTab()"><div style="font-size:16px;margin-bottom:3px">'+ic+'</div><div style="font-size:9px;letter-spacing:1px">'+l+'</div></button>').join('')}
-      </div>
-      <div class="label">Accent Color</div>
-      <div class="flex" style="flex-wrap:wrap;gap:8px">
-        ${ACCENT_PRESETS.map(p=>{
-          const active=(!S.accentColor&&p.id==='default')||(S.accentColor===p.hex);
-          return '<button style="width:36px;height:36px;border-radius:50%;background:'+p.hex+';border:2px solid '+(active?'var(--txt)':'transparent')+';box-shadow:'+(active?'0 0 0 3px var(--accd),0 0 12px '+p.hex+'44':'none')+';transition:all 0.2s" onclick="setAccent(\''+(p.id==='default'?'':p.hex)+'\')" title="'+p.label+'"></button>';
-        }).join('')}
       </div>
     </div>
 
@@ -3872,6 +3857,7 @@ function renderCalApp(){
   if(S.calTab==='calendar')renderBudgetForecastCalOnly();
   else if(S.calTab==='forecast')renderBudgetForecastForecastOnly();
   else if(S.calTab==='calhistory')renderCalHistory();
+  else if(S.calTab==='badges')renderBadgesTab();
 }
 
 function renderBudgetForecastCalOnly(){
