@@ -776,6 +776,57 @@ button{
 /* ── Scrollbar hide ─────────────────────────────────── */
 *::-webkit-scrollbar{display:none}
 *{scrollbar-width:none}
+
+/* ── Quick Add FAB ─────────────────────────────────── */
+#fab-wrap{
+  position:fixed;
+  bottom:24px;right:max(24px,calc((100vw - 560px)/2 + 16px));
+  z-index:98;
+  display:flex;flex-direction:column-reverse;align-items:flex-end;gap:10px;
+}
+#fab-btn{
+  width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg,var(--acc),var(--acc2));
+  color:#07080f;font-size:24px;font-weight:300;
+  border:none;cursor:pointer;
+  box-shadow:0 4px 20px rgba(168,199,255,0.35),0 0 0 4px rgba(168,199,255,0.08);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform 0.2s,box-shadow 0.2s;
+}
+#fab-btn:active{transform:scale(0.92)}
+#fab-btn.open{transform:rotate(45deg);background:var(--surf3);color:var(--acc);box-shadow:0 4px 16px rgba(0,0,0,0.4)}
+.fab-menu{display:none;flex-direction:column;gap:8px;align-items:flex-end}
+.fab-menu.open{display:flex}
+.fab-opt{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px;
+  background:rgba(10,12,24,0.88);
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  border:1px solid var(--bdrh);
+  border-radius:26px;
+  cursor:pointer;
+  box-shadow:0 4px 20px rgba(0,0,0,0.4);
+  white-space:nowrap;
+  transition:all 0.15s;
+}
+.fab-opt:active{transform:scale(0.96);background:rgba(168,199,255,0.1)}
+.fab-opt .fab-icon{font-size:14px}
+.fab-opt .fab-lbl{font-size:10px;letter-spacing:1px;color:var(--txt);font-family:'DM Mono',monospace}
+#fab-panel{
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:560px;
+  background:rgba(10,12,22,0.95);
+  backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);
+  border-top:1px solid var(--bdrh);
+  border-radius:var(--radius) var(--radius) 0 0;
+  padding:18px 20px;
+  padding-bottom:max(18px,env(safe-area-inset-bottom,0px));
+  z-index:99;display:none;
+  box-shadow:0 -8px 40px rgba(0,0,0,0.5);
+  max-height:70vh;overflow-y:auto;
+}
+#fab-panel.open{display:block}
 </style>
 </head>
 <body>
@@ -828,6 +879,21 @@ button{
   <div id="bottom-nav"></div>
 </div></div>
 
+
+<div id="fab-wrap">
+  <div class="fab-menu" id="fab-menu">
+    <div class="fab-opt" onclick="openFabPanel('shift')">
+      <span class="fab-icon" style="color:var(--pur)">◉</span>
+      <span class="fab-lbl">Log Shift</span>
+    </div>
+    <div class="fab-opt" onclick="openFabPanel('expense')">
+      <span class="fab-icon" style="color:var(--red)">−$</span>
+      <span class="fab-lbl">Add Expense</span>
+    </div>
+  </div>
+  <button id="fab-btn" onclick="toggleFab()">+</button>
+</div>
+<div id="fab-panel"></div>
 <div id="save-toast"><span class="toast-dot"></span><span id="toast-msg">SAVED</span></div>
 <div id="data-panel">
   <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -1573,6 +1639,16 @@ function renderTrackerTab(now,rate,ws,wk){
               <input type="date" value="${prevPc?.date||''}" onchange="savePaycheck('${prevWk}','date',this.value)" style="flex:1;font-size:12px" title="Date received">
             </div>
             ${prevVariance!=null?`<div style="font-size:11px;color:${prevVariance>=0?'var(--grn)':'var(--red)'};letter-spacing:1px">${prevVariance>=0?'▲':'▼'} ${fmt$(Math.abs(prevVariance))} ${prevVariance>=0?'more':'less'} than projected</div>`:''}
+            ${prevPc?.amount?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)">
+              <div class="label2">Deposit to Account</div>
+              ${prevPc.deposited?`<div style="font-size:10px;color:var(--grn);display:flex;align-items:center;gap:6px">✓ Deposited ${fmt$(prevPc.amount)} to ${(S.assets.find(a=>a.id===prevPc.depositAcct)||{}).label||'account'}</div>`:`<div class="flex gap8">
+                <select onchange="savePaycheck('${prevWk}','depositAcct',this.value)" style="flex:1;font-size:11px">
+                  <option value="">Choose account…</option>
+                  ${S.assets.filter(a=>ACCOUNT_TYPES.map(t=>t.id).includes(a.type)).map(a=>'<option value="'+a.id+'"'+(prevPc.depositAcct===a.id?' selected':'')+'>'+a.label+' ('+fmt$(a.value)+')</option>').join('')}
+                </select>
+                <button class="btn-sm btn-grn" ${!prevPc.depositAcct?'disabled style="opacity:.4"':''} onclick="depositPaycheckToAcct('${prevWk}')">Deposit</button>
+              </div>`}
+            </div>`:''}
           </div>
         </div>
         <div class="card mt10" style="border-left:2px solid var(--bdr)">
@@ -1587,7 +1663,9 @@ function renderTrackerTab(now,rate,ws,wk){
 
     <!-- Bills Due Before Next Payday -->
     ${(()=>{
-      const payD=payDateForWeek(wk);
+      const nextWkStart=new Date(ws);nextWkStart.setDate(nextWkStart.getDate()+7);
+      const nextWk=localStr(nextWkStart);
+      const payD=payDateForWeek(nextWk);
       const today=new Date();today.setHours(0,0,0,0);
       // Collect debt IDs to exclude auto-expenses linked to debts (they show via upDebt instead)
       const debtIds=new Set(S.debts.map(d=>d.id));
@@ -1653,10 +1731,20 @@ function renderTrackerTab(now,rate,ws,wk){
 function savePaycheck(wk,field,val){
   if(!S.paychecks[wk])S.paychecks[wk]={};
   if(field==='amount'){const v=parseFloat(val);if(v>0)S.paychecks[wk].amount=v;else delete S.paychecks[wk].amount;}
+  else if(field==='depositAcct'){S.paychecks[wk].depositAcct=val;save('paychecks');return;}
   else S.paychecks[wk][field]=val;
   if(!S.paychecks[wk].amount)delete S.paychecks[wk];
   save('paychecks');
   render();
+}
+function depositPaycheckToAcct(wk){
+  const pc=S.paychecks[wk];if(!pc||!pc.amount||!pc.depositAcct)return;
+  const acct=S.assets.find(a=>a.id===pc.depositAcct);if(!acct)return;
+  const prev=parseFloat(acct.value)||0;
+  S.assets=S.assets.map(a=>a.id===pc.depositAcct?{...a,prevValue:String(prev),value:String(prev+pc.amount),updatedDate:todayStr()}:a);
+  save('assets');
+  S.paychecks[wk].deposited=true;save('paychecks');
+  showToast(true);render();
 }
 
 // Quick-add transaction from Tracker
@@ -4526,8 +4614,22 @@ function startCustomChallenge(){
   save('savingsChallenge');renderSavingsChallenge();
 }
 function toggleWeek(i){
-  S.savingsChallenge.weeks[i].done=!S.savingsChallenge.weeks[i].done;
-  save('savingsChallenge');renderSavingsChallenge();
+  const wasChecked=S.savingsChallenge.weeks[i].done;
+  S.savingsChallenge.weeks[i].done=!wasChecked;
+  save('savingsChallenge');
+  // If linked to an account, adjust the account balance
+  const sc=S.savingsChallenge;
+  if(sc.accountId){
+    const acct=S.assets.find(a=>a.id===sc.accountId);
+    if(acct){
+      const amt=sc.weeks[i].target;
+      const prev=parseFloat(acct.value)||0;
+      const newVal=wasChecked?prev-amt:prev+amt;
+      S.assets=S.assets.map(a=>a.id===sc.accountId?{...a,prevValue:String(prev),value:String(Math.max(0,newVal)),updatedDate:todayStr()}:a);
+      save('assets');
+    }
+  }
+  renderSavingsChallenge();
 }
 
 // OVERTIME OPTIMIZER (Tracker Setup helper)
@@ -4986,6 +5088,117 @@ function importJSON(){
     if(bundle.autoCatRules){S.autoCatRules=bundle.autoCatRules;lsSet('auto_cat_rules_v1',S.autoCatRules);}
     showToast(true);closeDataPanel();render();
   }catch(e){alert('Import failed — make sure you pasted valid JSON.');}
+}
+
+
+// ─── Quick Add FAB ──────────────────────────────────────────────────────────
+let _fabOpen=false,_fabPanelOpen=false;
+function toggleFab(){
+  _fabOpen=!_fabOpen;
+  document.getElementById('fab-btn').classList.toggle('open',_fabOpen);
+  document.getElementById('fab-menu').classList.toggle('open',_fabOpen);
+  if(!_fabOpen)closeFabPanel();
+}
+function closeFab(){
+  _fabOpen=false;
+  document.getElementById('fab-btn').classList.toggle('open',false);
+  document.getElementById('fab-menu').classList.toggle('open',false);
+}
+function openFabPanel(type){
+  closeFab();
+  _fabPanelOpen=true;
+  const panel=document.getElementById('fab-panel');
+  panel.classList.add('open');
+  if(type==='shift')renderFabShift(panel);
+  else renderFabExpense(panel);
+}
+function closeFabPanel(){
+  _fabPanelOpen=false;
+  const panel=document.getElementById('fab-panel');
+  panel.classList.remove('open');
+  panel.innerHTML='';
+}
+
+let _fabShift={label:'',date:todayStr(),type:'hourly',hours:'',rate:'',gross:''};
+function fabShiftType(t){_fabShift.type=t;renderFabShift(document.getElementById('fab-panel'));}
+function renderFabShift(panel){
+  const defRate=String(parseFloat(S.schedule.hourlyRate)||'');
+  if(!_fabShift.rate)_fabShift.rate=defRate;
+  let previewGross=0;
+  if(_fabShift.type==='hourly')previewGross=(parseFloat(_fabShift.hours)||0)*(parseFloat(_fabShift.rate)||0);
+  else previewGross=parseFloat(_fabShift.gross)||0;
+  const isH=_fabShift.type==='hourly';
+  let h='<div style="margin-bottom:6px">';
+  h+='<div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px">';
+  h+='<div class="label" style="margin:0;color:var(--pur)">\u25C9 Log Shift</div>';
+  h+='<button class="btn-ghost btn-sm" onclick="closeFabPanel()">\u2715</button></div>';
+  h+='<div class="form-row">';
+  h+='<div><div class="label2">Label</div><input id="fab-cs-label" placeholder="e.g. OT Saturday" value="'+_fabShift.label+'" onblur="_fabShift.label=this.value"></div>';
+  h+='<div><div class="label2">Date</div><input type="date" id="fab-cs-date" value="'+_fabShift.date+'" onchange="_fabShift.date=this.value"></div>';
+  h+='</div>';
+  h+='<div class="flex gap8 mb10">';
+  h+='<button style="flex:1;padding:7px;border:1px solid '+(isH?'var(--pur)':'var(--bdr)')+';background:'+(isH?'var(--purd)':'transparent')+';color:'+(isH?'var(--pur)':'var(--mut)')+'" onclick="fabShiftType(&quot;hourly&quot;)">Hourly</button>';
+  h+='<button style="flex:1;padding:7px;border:1px solid '+(!isH?'var(--pur)':'var(--bdr)')+';background:'+(!isH?'var(--purd)':'transparent')+';color:'+(!isH?'var(--pur)':'var(--mut)')+'" onclick="fabShiftType(&quot;flat&quot;)">Flat Amount</button>';
+  h+='</div>';
+  if(isH){
+    h+='<div class="form-row"><div><div class="label2">Hours</div><input id="fab-cs-hrs" type="number" min="0" step=".25" placeholder="8.0" value="'+_fabShift.hours+'" oninput="_fabShift.hours=this.value"></div>';
+    h+='<div><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input id="fab-cs-rate" type="number" min="0" step=".25" placeholder="'+defRate+'" value="'+_fabShift.rate+'" oninput="_fabShift.rate=this.value" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div></div>';
+  } else {
+    h+='<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input id="fab-cs-gross" type="number" min="0" step=".01" placeholder="0.00" value="'+_fabShift.gross+'" oninput="_fabShift.gross=this.value" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>';
+  }
+  if(previewGross>0) h+='<div style="font-size:11px;color:var(--pur);margin-bottom:10px">\u2192 '+fmt$(previewGross)+' gross</div>';
+  h+='<div class="flex gap8">';
+  h+='<button class="btn-acc f1" style="background:var(--pur)" onclick="saveFabShift()">Save Shift</button>';
+  h+='<button class="btn-ghost" onclick="closeFabPanel()">Cancel</button>';
+  h+='</div></div>';
+  panel.innerHTML=h;
+}
+function saveFabShift(){
+  const f=_fabShift;
+  if(!f.date)return;
+  if(f.type==='hourly'&&(!f.hours||!f.rate))return;
+  if(f.type==='flat'&&!f.gross)return;
+  purgeLogDay(f.date);
+  S.customShifts=[...S.customShifts,{...f,id:Date.now().toString()}];
+  save('customShifts');
+  _fabShift={label:'',date:todayStr(),type:'hourly',hours:'',rate:String(parseFloat(S.schedule.hourlyRate)||''),gross:''};
+  closeFabPanel();showToast(true);render();
+}
+
+let _fabExpCat='custom';
+function fabExpCat(c){_fabExpCat=c;renderFabExpense(document.getElementById('fab-panel'));}
+function renderFabExpense(panel){
+  let h='<div style="margin-bottom:6px">';
+  h+='<div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px">';
+  h+='<div class="label" style="margin:0;color:var(--red)">\u2212$ Quick Expense</div>';
+  h+='<button class="btn-ghost btn-sm" onclick="closeFabPanel()">\u2715</button></div>';
+  h+='<div class="flex gap8 mb10">';
+  h+='<div class="f1"><div class="label2">Amount</div><div class="inp-row"><span class="pre">$</span>';
+  h+='<input id="fab-exp-amt" type="number" min="0" step=".01" placeholder="0.00" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>';
+  h+='<div class="f1"><div class="label2">Description</div><input id="fab-exp-desc" placeholder="e.g. Coffee, Gas"></div>';
+  h+='</div>';
+  h+='<div class="label2">Category</div>';
+  h+='<div class="chips mb10">';
+  for(let ci=0;ci<Math.min(CATS.length,10);ci++){
+    const c=CATS[ci];
+    const act=_fabExpCat===c.id;
+    h+='<button class="chip'+(act?' active':'')+'" style="'+(act?'border-color:'+c.color+';background:'+c.color+'22;color:'+c.color:'color:var(--mut)')+'" onclick="fabExpCat(&quot;'+c.id+'&quot;)">'+c.icon+' '+c.label+'</button>';
+  }
+  h+='</div>';
+  h+='<div class="flex gap8">';
+  h+='<button class="btn-acc f1" onclick="saveFabExpense()">Add Expense</button>';
+  h+='<button class="btn-ghost" onclick="closeFabPanel()">Cancel</button>';
+  h+='</div></div>';
+  panel.innerHTML=h;
+}
+function saveFabExpense(){
+  const amt=parseFloat(document.getElementById('fab-exp-amt')?.value);
+  const desc=document.getElementById('fab-exp-desc')?.value||'Manual entry';
+  if(!amt)return;
+  S.transactions=[...S.transactions,{id:Date.now().toString(),date:todayStr(),description:desc,amount:-Math.abs(amt),category:_fabExpCat,type:'purchase',imported:false}];
+  save('transactions');
+  _fabExpCat='custom';
+  closeFabPanel();showToast(true);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
