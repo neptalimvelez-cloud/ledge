@@ -52,9 +52,7 @@
   /* Glass effects */
   --glass-blur:blur(24px) saturate(180%);
   --glass-blur-sm:blur(12px) saturate(160%);
-  --shadow-glass:0 8px 32px rgba(0,0,0,0.4),0 1px 0 rgba(255,255,255,0.08) inset;
   --shadow-card:0 4px 24px rgba(0,0,0,0.3),0 1px 0 rgba(255,255,255,0.06) inset;
-  --shadow-glow:0 0 40px rgba(168,199,255,0.15);
 
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bot:env(safe-area-inset-bottom,0px);
@@ -63,6 +61,85 @@
   --radius-sm:10px;
   --radius-xs:7px;
 }
+
+/* ── Theme: AMOLED / True Black ────────────────────── */
+[data-theme="amoled"]{
+  --bg:#000000;
+  --bg2:#000000;
+  --surf:rgba(255,255,255,0.045);
+  --surf2:rgba(255,255,255,0.025);
+  --surf3:rgba(255,255,255,0.07);
+  --surf-solid:#080808;
+  --bdr:rgba(255,255,255,0.07);
+  --bdrh:rgba(255,255,255,0.14);
+  --shadow-card:0 2px 12px rgba(0,0,0,0.6),0 1px 0 rgba(255,255,255,0.04) inset;
+}
+[data-theme="amoled"] body,
+[data-theme="amoled"] html{background:#000000!important}
+[data-theme="amoled"] body::before{
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(var(--acc-rgb,168,199,255),0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 85% 30%, rgba(var(--acc-rgb,168,199,255),0.05) 0%, transparent 55%),
+    linear-gradient(160deg,#000 0%,#000 100%)!important;
+}
+[data-theme="amoled"] #app-switch{background:rgba(0,0,0,0.85)}
+[data-theme="amoled"] #bottom-nav{background:rgba(0,0,0,0.85)}
+[data-theme="amoled"] #splash{background:#000!important}
+
+/* ── Theme: Light ──────────────────────────────────── */
+[data-theme="light"]{
+  --bg:#f0f2f7;
+  --bg2:#e8eaf0;
+  --surf:rgba(255,255,255,0.75);
+  --surf2:rgba(255,255,255,0.55);
+  --surf3:rgba(255,255,255,0.85);
+  --surf-solid:#ffffff;
+  --bdr:rgba(0,0,0,0.08);
+  --bdrh:rgba(0,0,0,0.15);
+  --bdr-glow:rgba(var(--acc-rgb,168,199,255),0.3);
+  --txt:rgba(0,0,0,0.88);
+  --txt2:rgba(0,0,0,0.55);
+  --mut:rgba(0,0,0,0.35);
+  --mut2:rgba(0,0,0,0.15);
+  --grn:#1a9956;  --grnd:rgba(26,153,86,0.1);
+  --red:#d93025;  --redd:rgba(217,48,37,0.1);
+  --org:#e67700;  --orgd:rgba(230,119,0,0.1);
+  --blu:#1a73e8;  --blud:rgba(26,115,232,0.1);
+  --pur:#8430ce;  --purd:rgba(132,48,206,0.1);
+  --cya:#0d7377;
+  --glass-blur:blur(20px) saturate(140%);
+  --glass-blur-sm:blur(10px) saturate(120%);
+  --shadow-card:0 2px 8px rgba(0,0,0,0.06),0 1px 0 rgba(255,255,255,0.8) inset;
+}
+[data-theme="light"] body,
+[data-theme="light"] html{background:#f0f2f7!important}
+[data-theme="light"] body::before{
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(var(--acc-rgb,168,199,255),0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 85% 30%, rgba(var(--acc-rgb,168,199,255),0.08) 0%, transparent 55%),
+    linear-gradient(160deg,#f0f2f7 0%,#e8eaf0 50%,#f0f2f7 100%)!important;
+}
+[data-theme="light"] #app-switch{background:rgba(240,242,247,0.8)}
+[data-theme="light"] #bottom-nav{background:rgba(240,242,247,0.85)}
+[data-theme="light"] #data-panel{background:rgba(240,242,247,0.95)}
+[data-theme="light"] #fab-panel{background:rgba(240,242,247,0.97)}
+[data-theme="light"] #pin-overlay{background:rgba(240,242,247,0.98)}
+[data-theme="light"] #splash{background:#f0f2f7!important}
+[data-theme="light"] select option{background:#fff;color:rgba(0,0,0,0.88)}
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea{background:rgba(0,0,0,0.03);border-color:rgba(0,0,0,0.1)}
+[data-theme="light"] input:focus,
+[data-theme="light"] select:focus,
+[data-theme="light"] textarea:focus{border-color:rgba(var(--acc-rgb,168,199,255),0.5);box-shadow:0 0 0 3px rgba(var(--acc-rgb,168,199,255),0.1);background:rgba(var(--acc-rgb,168,199,255),0.04)}
+[data-theme="light"] .inp-row{background:rgba(0,0,0,0.03);border-color:rgba(0,0,0,0.1)}
+[data-theme="light"] .tab-row{background:rgba(0,0,0,0.04)}
+[data-theme="light"] .tab-row button.active{color:#fff}
+[data-theme="light"] .btn-acc{color:#fff}
+[data-theme="light"] .btn-ghost{background:rgba(255,255,255,0.6);border-color:rgba(0,0,0,0.12)}
+[data-theme="light"] .card::before{background:linear-gradient(90deg,transparent,rgba(255,255,255,0.5),transparent)}
+[data-theme="light"] .fab-opt{background:rgba(255,255,255,0.9)}
+[data-theme="light"] .hdr{background:rgba(240,242,247,0.7)}
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
@@ -530,7 +607,6 @@ button{
 }
 
 /* ── Chart ──────────────────────────────────────────── */
-.chart-wrap{width:100%;overflow:hidden;margin-bottom:16px}
 
 /* ── Header ─────────────────────────────────────────── */
 .hdr{
@@ -827,6 +903,23 @@ button{
   max-height:70vh;overflow-y:auto;
 }
 #fab-panel.open{display:block}
+
+/* ── Setup Wizard ───────────────────────────────────── */
+#wizard-overlay.hidden{display:none!important}
+#wizard-overlay{
+  background:var(--bg);
+  overflow:hidden;
+}
+.wiz-step{animation:wizFadeIn 0.3s ease}
+@keyframes wizFadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.wiz-title{font-size:20px;font-weight:300;color:var(--acc);margin-bottom:6px;letter-spacing:1px}
+.wiz-sub{font-size:11px;color:var(--mut);margin-bottom:20px;line-height:1.6}
+.wiz-progress{display:flex;gap:4px;margin-bottom:24px}
+.wiz-dot{height:3px;flex:1;border-radius:2px;background:var(--surf3);transition:background 0.3s}
+.wiz-dot.done{background:var(--acc)}
+.wiz-dot.active{background:var(--acc);box-shadow:0 0 8px var(--acc-glow)}
+.wiz-nav{display:flex;gap:10px;margin-top:24px}
+.wiz-nav button{flex:1}
 </style>
 </head>
 <body>
@@ -899,7 +992,8 @@ button{
   <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px">
     <div>
       <div class="label">Data Backup & Restore</div>
-      <div id="storage-status" style="font-size:9px;margin-top:3px"></div>
+      <div id="storage-status" style="font-size:9px;margin-top:3px;cursor:pointer" onclick="toggleStorageBreakdown()"></div>
+      <div id="storage-breakdown" style="display:none;margin-top:6px"></div>
     </div>
     <button class="btn-ghost btn-sm" onclick="closeDataPanel()">✕</button>
   </div>
@@ -921,6 +1015,11 @@ button{
       </div>
     </div>
   </div>
+</div>
+
+<!-- Setup Wizard Overlay -->
+<div id="wizard-overlay" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99997;background:var(--bg);display:flex;align-items:center;justify-content:center">
+  <div id="wizard-content" style="width:100%;max-width:520px;height:100%;overflow-y:auto;padding:20px;padding-top:max(20px,env(safe-area-inset-top,0px))"></div>
 </div>
 
 <script>
@@ -976,6 +1075,10 @@ let S={
   transactions:[], // [{id,date,description,amount,category,source,imported}]
   incomeSafetyThresholds:{monthlyFloor:'',notifyOnShortfall:true}, // income threshold alerts
   autoCatRules:[], // [{id,keyword,category}] user-defined auto-categorize rules
+  theme:'midnight',
+  accentColor:'',
+  wizardSeen:false,
+  achievements:{},
   pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null},
 };
 
@@ -1009,6 +1112,10 @@ function loadState(){
   if(ist)S.incomeSafetyThresholds={...S.incomeSafetyThresholds,...ist};
   if(acr)S.autoCatRules=acr;
   const edd=lsGet('early_deposit_v1');if(edd!=null)S.earlyDepositDays=edd;
+  const thm=lsGet('theme_v1');if(thm)S.theme=thm;
+  const wiz=lsGet('wizard_seen_v1');if(wiz)S.wizardSeen=wiz;
+  const ach=lsGet('achievements_v1');if(ach)S.achievements=ach;
+  const acclr=lsGet('accent_color_v1');if(acclr)S.accentColor=acclr;
   if(ps&&ps.dayKey){
     const today=dayKey(new Date());
     const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
@@ -1042,7 +1149,11 @@ function save(key){
     transactions:'transactions_v1',
     incomeSafetyThresholds:'income_thresholds_v1',autoCatRules:'auto_cat_rules_v1',
     retirement401k:'ret401k_v1',sideIncome:'side_income_v1',savingsChallenge:'savings_challenge_v1',
-    earlyDepositDays:'early_deposit_v1'
+    earlyDepositDays:'early_deposit_v1',
+    theme:'theme_v1',
+    wizardSeen:'wizard_seen_v1',
+    achievements:'achievements_v1',
+    accentColor:'accent_color_v1'
   };
   lsSet(map[key],S[key]);
   showToast(false);
@@ -1110,7 +1221,6 @@ function localStr(d){const x=new Date(d);x.setHours(0,0,0,0);return`${x.getFullY
 function parseLocal(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
 function dayKey(d){return localStr(d);}
 function todayStr(){return localStr(new Date());}
-function sameDay(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const FULL_DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1272,7 +1382,356 @@ function setTab(tab){
   render();
 }
 
+// ── Setup Wizard ──────────────────────────────────────────────────────────────
+let _wizStep=0;
+const WIZ_STEPS=['welcome','schedule','deductions','annual','theme','done'];
+
+function shouldShowWizard(){
+  if(S.wizardSeen)return false;
+  // Don't show if user already has data
+  if(S.schedule.hourlyRate||Object.keys(S.log).length>0||S.expenses.length>0)return false;
+  return true;
+}
+
+function openWizard(){
+  _wizStep=0;
+  document.getElementById('wizard-overlay').classList.remove('hidden');
+  renderWizard();
+}
+
+function closeWizard(){
+  document.getElementById('wizard-overlay').classList.add('hidden');
+  S.wizardSeen=true;save('wizardSeen');
+}
+
+function wizNext(){
+  // Save current step data before advancing
+  wizSaveStep();
+  _wizStep++;
+  if(_wizStep>=WIZ_STEPS.length){closeWizard();render();return;}
+  renderWizard();
+}
+
+function wizBack(){
+  wizSaveStep();
+  if(_wizStep>0)_wizStep--;
+  renderWizard();
+}
+
+function wizSaveStep(){
+  const step=WIZ_STEPS[_wizStep];
+  if(step==='schedule'){
+    const rate=document.getElementById('wiz-rate')?.value||'';
+    const wsd=document.getElementById('wiz-wsd')?.value||'0';
+    S.schedule.hourlyRate=rate;
+    S.schedule.weekStartDay=wsd;
+    // Read day toggles
+    for(let d=0;d<7;d++){
+      const cb=document.getElementById('wiz-day-'+d);
+      if(cb)S.schedule.shifts[d].active=cb.checked;
+      const st=document.getElementById('wiz-start-'+d);
+      const en=document.getElementById('wiz-end-'+d);
+      if(st)S.schedule.shifts[d].start=st.value;
+      if(en)S.schedule.shifts[d].end=en.value;
+    }
+    save('schedule');
+  } else if(step==='deductions'){
+    const tax=document.getElementById('wiz-tax')?.value||'';
+    S.taxRate=tax;save('taxRate');
+  } else if(step==='annual'){
+    const goal=document.getElementById('wiz-annual')?.value||'';
+    S.schedule.annualGoal=goal;save('schedule');
+  } else if(step==='theme'){
+    // Theme is applied live via setTheme/setAccent, nothing to save here
+  }
+}
+
+function wizSkip(){
+  closeWizard();render();
+}
+
+function renderWizard(){
+  const el=document.getElementById('wizard-content');
+  const step=WIZ_STEPS[_wizStep];
+  const DAYS_FULL=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  // Progress dots
+  let prog='<div class="wiz-progress">';
+  for(let i=0;i<WIZ_STEPS.length;i++){
+    prog+='<div class="wiz-dot'+(_wizStep>i?' done':_wizStep===i?' active':'')+'"></div>';
+  }
+  prog+='</div>';
+
+  let h='<div class="wiz-step">'+prog;
+
+  if(step==='welcome'){
+    h+='<div style="text-align:center;padding-top:40px">';
+    h+='<div style="font-size:48px;margin-bottom:16px;filter:drop-shadow(0 0 20px var(--acc-glow))">◆</div>';
+    h+='<div class="wiz-title" style="font-size:26px">Welcome to Ledge</div>';
+    h+='<div class="wiz-sub" style="font-size:13px;max-width:300px;margin:12px auto 30px">Let\u2019s get your finances set up in under a minute.</div>';
+    h+='<button class="btn-acc" style="padding:14px 40px;font-size:12px" onclick="wizNext()">Get Started</button>';
+    h+='<div style="margin-top:16px"><button style="color:var(--mut);font-size:10px" onclick="wizSkip()">Skip setup</button></div>';
+    h+='</div>';
+  }
+
+  else if(step==='schedule'){
+    h+='<div class="wiz-title">Your Schedule</div>';
+    h+='<div class="wiz-sub">Set your hourly rate and which days you work.</div>';
+    h+='<div class="label">Hourly Rate</div>';
+    h+='<div class="inp-row mb14"><span class="pre" style="font-size:20px;color:var(--acc)">$</span>';
+    h+='<input id="wiz-rate" type="number" min="0" step=".25" placeholder="0.00" value="'+(S.schedule.hourlyRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
+    h+='<div class="label mt14">Pay Week Starts</div>';
+    h+='<select id="wiz-wsd" style="margin-bottom:14px">';
+    for(let i=0;i<7;i++){
+      h+='<option value="'+i+'"'+(parseInt(S.schedule.weekStartDay)===i?' selected':'')+'>'+DAYS_FULL[i]+'</option>';
+    }
+    h+='</select>';
+    h+='<div class="label mt14">Work Days</div>';
+    for(let d=0;d<7;d++){
+      const sh=S.schedule.shifts[d];
+      h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;background:var(--surf);border-left:2px solid '+(sh.active?'var(--acc)':'var(--bdr)')+'">';
+      h+='<input type="checkbox" id="wiz-day-'+d+'"'+(sh.active?' checked':'')+' style="width:18px;height:18px;accent-color:var(--acc)">';
+      h+='<span style="width:35px;font-size:12px;font-weight:bold;color:'+(sh.active?'var(--acc)':'var(--mut)')+'">'+DAYS_FULL[d].slice(0,3)+'</span>';
+      if(sh.active){
+        h+='<input type="time" id="wiz-start-'+d+'" value="'+sh.start+'" style="flex:1;font-size:11px">';
+        h+='<span style="color:var(--mut);font-size:10px">to</span>';
+        h+='<input type="time" id="wiz-end-'+d+'" value="'+sh.end+'" style="flex:1;font-size:11px">';
+      }
+      h+='</div>';
+    }
+    h+='<div class="wiz-nav">';
+    h+='<button class="btn-ghost" onclick="wizBack()">Back</button>';
+    h+='<button class="btn-acc" onclick="wizNext()">Next</button></div>';
+  }
+
+  else if(step==='deductions'){
+    h+='<div class="wiz-title">Tax Rate</div>';
+    h+='<div class="wiz-sub">Set your estimated tax rate for take-home calculations. You can add detailed deductions later in Setup.</div>';
+    h+='<div class="label">Estimated Tax %</div>';
+    h+='<div class="inp-row mb14"><input id="wiz-tax" type="number" min="0" max="60" step="0.5" placeholder="e.g. 22" value="'+(S.taxRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px">';
+    h+='<span style="padding:0 14px;color:var(--mut);font-size:20px">%</span></div>';
+    h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">Common ranges: 10-15% (low income), 18-25% (middle), 28-35% (higher). This is just an estimate.</div>';
+    h+='<div class="wiz-nav">';
+    h+='<button class="btn-ghost" onclick="wizBack()">Back</button>';
+    h+='<button class="btn-acc" onclick="wizNext()">Next</button></div>';
+  }
+
+  else if(step==='annual'){
+    // Calculate projected annual based on schedule
+    const rate=parseFloat(S.schedule.hourlyRate)||0;
+    let wkHrs=0;
+    for(let d=0;d<7;d++){
+      const sh=S.schedule.shifts[d];
+      if(!sh.active)continue;
+      const sm=parseInt(sh.start.split(':')[0])*60+parseInt(sh.start.split(':')[1]||0);
+      const em=parseInt(sh.end.split(':')[0])*60+parseInt(sh.end.split(':')[1]||0);
+      const dur=em<sm?em+1440-sm:em-sm;
+      wkHrs+=dur/60;
+    }
+    const projGross=rate*wkHrs*52;
+    const taxPct=parseFloat(S.taxRate)||0;
+    const projNet=projGross*(1-taxPct/100);
+
+    h+='<div class="wiz-title">Annual Goal</div>';
+    h+='<div class="wiz-sub">Track progress toward a yearly earnings target.</div>';
+
+    if(rate>0&&wkHrs>0){
+      h+='<div class="card glass mb14" style="border-left:2px solid var(--acc)">';
+      h+='<div style="font-size:8px;letter-spacing:2px;color:var(--mut);margin-bottom:6px">PROJECTED FROM YOUR SCHEDULE</div>';
+      h+='<div style="font-size:11px;color:var(--txt);line-height:1.8">';
+      h+='<div>'+wkHrs.toFixed(1)+'h/wk × $'+rate.toFixed(2)+' × 52 weeks</div>';
+      h+='<div style="font-size:18px;color:var(--acc);font-weight:300;margin:4px 0">'+fmt$(projGross)+' <span style="font-size:10px;color:var(--mut)">gross/yr</span></div>';
+      if(taxPct>0){
+        h+='<div style="font-size:12px;color:var(--grn)">'+fmt$(projNet)+' <span style="font-size:9px;color:var(--mut)">after '+taxPct+'% tax</span></div>';
+      }
+      h+='</div></div>';
+      h+='<button class="btn-ghost btn-sm mb14" style="width:100%;color:var(--acc)" onclick="document.getElementById(&quot;wiz-annual&quot;).value=&quot;'+Math.round(projNet||projGross)+'&quot;" >Use '+fmt$(Math.round(projNet||projGross))+' as my goal</button>';
+    }
+
+    h+='<div class="label">Annual Earnings Goal</div>';
+    h+='<div class="inp-row mb14"><span class="pre" style="font-size:20px;color:var(--acc)">$</span>';
+    h+='<input id="wiz-annual" type="number" min="0" step="1000" placeholder="0" value="'+(S.schedule.annualGoal||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
+    h+='<div style="font-size:10px;color:var(--mut)">Shown in History > YTD as a progress bar. Leave blank to skip.</div>';
+    h+='<div class="wiz-nav">';
+    h+='<button class="btn-ghost" onclick="wizBack()">Back</button>';
+    h+='<button class="btn-acc" onclick="wizNext()">Next</button></div>';
+  }
+
+  else if(step==='theme'){
+    h+='<div class="wiz-title">Appearance</div>';
+    h+='<div class="wiz-sub">Pick a theme and accent color.</div>';
+    h+='<div class="label">Theme</div>';
+    h+='<div class="flex gap8 mb16">';
+    var themes=[['midnight','\u{1f30c}','Midnight'],['amoled','\u25fc','AMOLED'],['light','\u2600','Light']];
+    for(var ti=0;ti<3;ti++){
+      // Use data attributes for clean JS
+    }
+    h+='</div>';
+    // Build theme buttons with simple onclick
+    h='<div class="wiz-step">'+prog;
+    h+='<div class="wiz-title">Appearance</div>';
+    h+='<div class="wiz-sub">Pick a theme and accent color.</div>';
+    h+='<div class="label">Theme</div>';
+    h+='<div class="flex gap8 mb16">';
+    var tmData=[['midnight','🌌','Midnight'],['amoled','◼','AMOLED'],['light','☀','Light']];
+    for(var ti=0;ti<tmData.length;ti++){
+      var tv=tmData[ti][0],tic=tmData[ti][1],tl=tmData[ti][2];
+      var tact=(S.theme||'midnight')===tv;
+      h+='<button style="flex:1;padding:12px 8px;text-align:center;border:1px solid '+(tact?'var(--acc)':'var(--bdr)')+';background:'+(tact?'var(--accd)':'transparent')+';color:'+(tact?'var(--acc)':'var(--mut)')+'" onclick="setTheme(&quot;'+tv+'&quot;);renderWizard()"><div style="font-size:18px;margin-bottom:4px">'+tic+'</div><div style="font-size:10px">'+tl+'</div></button>';
+    }
+    h+='</div>';
+    h+='<div class="label">Accent Color</div>';
+    h+='<div class="flex" style="flex-wrap:wrap;gap:10px;margin-bottom:16px">';
+    // Will be filled by JS using ACCENT_PRESETS
+    h+='</div>';
+    h+='<div class="wiz-nav">';
+    h+='<button class="btn-ghost" onclick="wizBack()">Back</button>';
+    h+='<button class="btn-acc" onclick="wizNext()">Next</button></div>';
+  }
+
+  else if(step==='done'){
+    h+='<div style="text-align:center;padding-top:50px">';
+    h+='<div style="font-size:48px;margin-bottom:16px">✓</div>';
+    h+='<div class="wiz-title" style="font-size:24px;color:var(--grn)">You\u2019re All Set!</div>';
+    h+='<div class="wiz-sub" style="font-size:12px;margin:12px auto 30px;max-width:280px">Your schedule and preferences are saved. You can always adjust everything in Setup.</div>';
+    h+='<button class="btn-acc" style="padding:14px 40px;font-size:12px" onclick="wizNext()">Start Using Ledge</button>';
+    h+='</div>';
+  }
+
+  h+='</div>';
+  el.innerHTML=h;
+
+  // If on theme step, build accent buttons after innerHTML is set
+  if(step==='theme'){
+    const acWrap=el.querySelectorAll('.flex')[1]; // second flex is accent
+    if(acWrap){
+      let acH='';
+      for(const p of ACCENT_PRESETS){
+        const active=(!S.accentColor&&p.id==='default')||(S.accentColor===p.hex);
+        acH+='<button style="width:40px;height:40px;border-radius:50%;background:'+p.hex+';border:2px solid '+(active?'var(--txt)':'transparent')+';box-shadow:'+(active?'0 0 0 3px var(--accd),0 0 12px '+p.hex+'44':'none')+'" onclick="setAccent(&quot;'+(p.id==='default'?'':p.hex)+'&quot;);renderWizard()" title="'+p.label+'"></button>';
+      }
+      acWrap.innerHTML=acH;
+    }
+  }
+}
+
+// ── Annual Goal Auto-Calculator ──────────────────────────────────────────────
+function calcAnnualGoalEstimate(){
+  const rate=parseFloat(S.schedule.hourlyRate)||0;
+  if(!rate)return null;
+  let wkHrs=0;
+  for(let d=0;d<7;d++){
+    const sh=S.schedule.shifts[d];
+    if(!sh.active)continue;
+    const parts=sh.start.split(':'),eParts=sh.end.split(':');
+    const sm=parseInt(parts[0])*60+parseInt(parts[1]||0);
+    const em=parseInt(eParts[0])*60+parseInt(eParts[1]||0);
+    const dur=em<sm?em+1440-sm:em-sm;
+    wkHrs+=dur/60;
+  }
+  const siWeekly=S.sideIncome.filter(s=>s.frequency!=='one-time').reduce((t,s)=>t+toWeekly({amount:s.amount,frequency:s.frequency}),0);
+  const wkGross=wkHrs*rate+siWeekly;
+  const annGross=wkGross*52;
+  const taxPct=parseFloat(S.taxRate)||0;
+  const annNet=annGross*(1-taxPct/100);
+  return{wkHrs,annGross,annNet,taxPct,siWeekly};
+}
+
+// ── Backup Size Tracking ─────────────────────────────────────────────────────
+function getStorageInfo(){
+  let totalBytes=0;
+  const breakdown={};
+  const labels={
+    'sch_v3':'Schedule','ded_v3':'Deductions','log_v3':'Shift Log',
+    'pause_v3':'Pause','custom_shifts_v1':'Custom Shifts','paychecks_v1':'Paychecks',
+    'budget_expenses_v1':'Expenses','budget_goals_v1':'Goals','budget_debts_v1':'Debts',
+    'envelopes_v1':'Envelopes','assets_v1':'Accounts','tax_rate_v1':'Tax Rate',
+    'pin_v1':'PIN','snapshots_v1':'Snapshots','milestones_v1':'Milestones',
+    'ret401k_v1':'401k','side_income_v1':'Side Income','savings_challenge_v1':'Challenge',
+    'transactions_v1':'Transactions','early_deposit_v1':'Early Deposit',
+    'income_thresholds_v1':'Thresholds','auto_cat_rules_v1':'Auto-Cat Rules',
+    'theme_v1':'Theme','accent_color_v1':'Accent','wizard_seen_v1':'Wizard'
+  };
+  for(const[k,label] of Object.entries(labels)){
+    const v=localStorage.getItem(k);
+    if(v){
+      const bytes=new Blob([v]).size;
+      totalBytes+=bytes;
+      breakdown[label]=bytes;
+    }
+  }
+  // localStorage limit is typically 5-10MB
+  const limitMB=5;
+  return{totalBytes,breakdown,limitMB,pct:((totalBytes/(limitMB*1024*1024))*100)};
+}
+
+function fmtBytes(b){
+  if(b<1024)return b+' B';
+  if(b<1024*1024)return(b/1024).toFixed(1)+' KB';
+  return(b/(1024*1024)).toFixed(2)+' MB';
+}
+
+function updateStorageStatus(){
+  const el=document.getElementById('storage-status');
+  if(!el)return;
+  const info=getStorageInfo();
+  const color=info.pct>80?'var(--red)':info.pct>50?'var(--org)':'var(--grn)';
+  el.innerHTML='<span style="color:'+color+'">'+fmtBytes(info.totalBytes)+'</span> / '+info.limitMB+'MB used ('+info.pct.toFixed(1)+'%)'
+    +'<div class="prog" style="margin-top:4px;height:3px"><div class="prog-fill" style="width:'+Math.min(100,info.pct)+'%;background:'+color+'"></div></div>'
+    +'<div style="font-size:8px;color:var(--mut2);margin-top:2px">tap for breakdown</div>';
+  // Also update breakdown
+  const bd=document.getElementById('storage-breakdown');
+  if(bd){
+    const sorted=Object.entries(info.breakdown).sort((a,b)=>b[1]-a[1]);
+    bd.innerHTML=sorted.map(([label,bytes])=>{
+      const pct=(bytes/info.totalBytes*100).toFixed(0);
+      return '<div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0;border-bottom:1px solid var(--surf2)"><span style="color:var(--txt2)">'+label+'</span><span style="color:var(--mut)">'+fmtBytes(bytes)+' ('+pct+'%)</span></div>';
+    }).join('');
+  }
+}
+function toggleStorageBreakdown(){
+  const bd=document.getElementById('storage-breakdown');
+  if(bd)bd.style.display=bd.style.display==='none'?'block':'none';
+}
+
+// ── Theme & Accent ───────────────────────────────────────────────────────────
+const ACCENT_PRESETS=[
+  {id:'default',label:'Ice Blue',hex:'#a8c7ff',rgb:'168,199,255'},
+  {id:'emerald',label:'Emerald',hex:'#5de8a0',rgb:'93,232,160'},
+  {id:'coral',label:'Coral',hex:'#ff6b7a',rgb:'255,107,122'},
+  {id:'amber',label:'Amber',hex:'#ffad6b',rgb:'255,173,107'},
+  {id:'violet',label:'Violet',hex:'#c4a0ff',rgb:'196,160,255'},
+  {id:'cyan',label:'Cyan',hex:'#6be8e8',rgb:'107,232,232'},
+  {id:'rose',label:'Rose',hex:'#ff7eb3',rgb:'255,126,179'},
+  {id:'lime',label:'Lime',hex:'#b8e855',rgb:'184,232,85'},
+];
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme',S.theme||'midnight');
+  const r=document.documentElement.style;
+  if(S.accentColor&&S.accentColor!=='#a8c7ff'){
+    const hex=S.accentColor;
+    const rr=parseInt(hex.slice(1,3),16),gg=parseInt(hex.slice(3,5),16),bb=parseInt(hex.slice(5,7),16);
+    const rgbStr=rr+','+gg+','+bb;
+    r.setProperty('--acc',hex);
+    r.setProperty('--acc2',hex);
+    r.setProperty('--accd','rgba('+rgbStr+',0.12)');
+    r.setProperty('--acc-glow','rgba('+rgbStr+',0.35)');
+    r.setProperty('--bdr-glow','rgba('+rgbStr+',0.22)');
+    r.setProperty('--acc-rgb',rgbStr);
+  } else {
+    r.removeProperty('--acc');
+    r.removeProperty('--acc2');
+    r.removeProperty('--accd');
+    r.removeProperty('--acc-glow');
+    r.removeProperty('--bdr-glow');
+    r.removeProperty('--acc-rgb');
+  }
+}
+function setTheme(t){S.theme=t;save('theme');applyTheme();}
+function setAccent(hex){S.accentColor=hex;save('accentColor');applyTheme();render();}
+
 function render(){
+  checkAchievements();
   // Sync top switcher active classes to current app state
   ['tracker','budget','worth','cal'].forEach(a=>{
     const btn=document.getElementById('sw-'+a);
@@ -1298,6 +1757,7 @@ function renderNav(){
 let _tick; // interval handle
 
 function renderTracker(){
+  backfillMissedShifts();
   clearInterval(_tick);
   const now=new Date(),rate=parseFloat(S.schedule.hourlyRate)||0;
   const hdr=document.getElementById('hdr-area');
@@ -1537,13 +1997,26 @@ function renderTrackerTab(now,rate,ws,wk){
     const sec=isCur?netSec:(thisWk[dk]||0);
     const isLive=isCur&&!p.paused;
     const dayE=otMode==='shift'?calcEarnings(sec,rate,oa,om):null;
-    return`<div class="day-row" style="opacity:${sh.active?1:.28}">
+    // Shift hue: green for worked, yellow for break, gradient for live
+    const onBreakNow=isLive&&p.onBreak;
+    const workedBg=sec>0&&!isLive?'background:linear-gradient(90deg,rgba(93,232,160,0.06) 0%,rgba(93,232,160,0.03) 100%);':'';
+    let liveBg='';
+    if(isLive){
+      const shSm=toMin(sh.start),shEm=toMin(sh.end);
+      const shDur=shEm<shSm?shEm+1440-shSm:shEm-shSm;
+      const shPct=shDur>0?Math.min(100,Math.round((netSec/(shDur*60))*100)):0;
+      liveBg=onBreakNow
+        ?'background:linear-gradient(90deg,rgba(93,232,160,0.08) 0%,rgba(93,232,160,0.08) '+shPct+'%,rgba(255,173,107,0.1) '+shPct+'%,rgba(255,173,107,0.06) 100%);'
+        :'background:linear-gradient(90deg,rgba(93,232,160,0.1) 0%,rgba(93,232,160,0.06) '+shPct+'%,transparent '+shPct+'%);';
+    }
+    const dayBg=isLive?liveBg:workedBg;
+    return`<div class="day-row" style="opacity:${sh.active?1:.28};${dayBg}${isLive?'border-radius:4px;':''}">
       <div class="flex" style="align-items:center;gap:10px">
-        <span class="day-dot${isLive?' live':sec>0?' done':''}"></span>
+        <span class="day-dot${isLive?(onBreakNow?' on-break':' live'):sec>0?' done':''}"></span>
         <span style="font-size:12px;width:28px;color:${isLive?'var(--txt)':'var(--mut)'};font-weight:${isLive?'bold':'normal'}">${DAYS[dow]}</span>
         ${sh.active?`<span style="font-size:8px;color:var(--mut2);letter-spacing:1px">${sh.start}–${sh.end}</span>`:''}
       </div>
-      <span style="font-size:14px;color:${isLive?(ot.inOT?'var(--org)':'var(--grn)'):(sec>0?'var(--txt)':'var(--mut2)')};font-weight:${isLive?'bold':'normal'}">
+      <span style="font-size:14px;color:${isLive?(onBreakNow?'var(--org)':(ot.inOT?'var(--org)':'var(--grn)')):(sec>0?'var(--txt)':'var(--mut2)')};font-weight:${isLive?'bold':'normal'}">
         ${sh.active?(otMode==='shift'?fmt$(dayE||0):`${(sec/3600).toFixed(1)}h`):'—'}
       </span>
     </div>`;
@@ -2333,6 +2806,108 @@ function saveHistEntry(){
 
 // ─── DEDUCTIONS TAB ──────────────────────────────────────────────────────────
 let _editDedId=null,_newDed={label:'',type:'flat',value:''};
+// ── Achievement Badges ────────────────────────────────────────────────────────
+const BADGES=[
+  {id:'first_shift',icon:'🎬',label:'First Shift',desc:'Log your first shift',check:()=>Object.keys(S.log).length>0||S.customShifts.length>0},
+  {id:'week_warrior',icon:'⚔️',label:'Week Warrior',desc:'Complete a full 5-day work week',check:()=>{for(const[wk,dm] of Object.entries(S.log)){if(Object.keys(dm).length>=5)return true;}return false;}},
+  {id:'first_paycheck',icon:'💰',label:'First Paycheck',desc:'Record your first actual paycheck',check:()=>Object.values(S.paychecks).some(p=>p.amount)},
+  {id:'budget_starter',icon:'📊',label:'Budget Starter',desc:'Add your first expense',check:()=>S.expenses.length>0},
+  {id:'saver',icon:'🎯',label:'Goal Setter',desc:'Create a savings goal',check:()=>S.goals.length>0},
+  {id:'debt_fighter',icon:'🛡️',label:'Debt Fighter',desc:'Track a debt for payoff',check:()=>S.debts.length>0},
+  {id:'net_worth',icon:'💎',label:'Net Worth Tracker',desc:'Add your first account',check:()=>S.assets.length>0},
+  {id:'snapshot',icon:'📸',label:'Snapshot',desc:'Take a net worth snapshot',check:()=>S.snapshots.length>0},
+  {id:'ten_weeks',icon:'📅',label:'Dedicated',desc:'Track 10 weeks of shifts',check:()=>Object.keys(S.log).length>=10},
+  {id:'overtime_hero',icon:'⏰',label:'Overtime Hero',desc:'Work overtime in a shift',check:()=>{const oa=parseFloat(S.schedule.overtimeAfter)||999;for(const dm of Object.values(S.log)){for(const sec of Object.values(dm)){if(sec/3600>oa)return true;}}return false;}},
+  {id:'five_goals',icon:'🏆',label:'Ambitious',desc:'Create 5 savings goals',check:()=>S.goals.length>=5},
+  {id:'import_tx',icon:'🏦',label:'Bank Connected',desc:'Import bank transactions',check:()=>S.transactions.some(t=>t.imported)},
+  {id:'challenge',icon:'🔥',label:'Challenge Accepted',desc:'Start the savings challenge',check:()=>!!S.savingsChallenge},
+  {id:'milestone',icon:'🏔️',label:'Milestone Maker',desc:'Achieve a financial milestone',check:()=>S.milestones.some(m=>m.achieved)},
+  {id:'debt_free',icon:'🎉',label:'Debt Free',desc:'Pay off all debts',check:()=>S.debts.length>0&&S.debts.every(d=>(parseFloat(d.balance)||0)<=0)},
+  {id:'twenty_weeks',icon:'💪',label:'Iron Will',desc:'Track 20 weeks of shifts',check:()=>Object.keys(S.log).length>=20},
+  {id:'side_hustle',icon:'🌟',label:'Side Hustler',desc:'Add side income',check:()=>S.sideIncome.length>0},
+  {id:'customizer',icon:'🎨',label:'Make It Yours',desc:'Change the theme or accent color',check:()=>S.theme!=='midnight'||!!S.accentColor},
+  {id:'k401',icon:'🏛️',label:'Retirement Ready',desc:'Set up 401k tracking',check:()=>!!S.retirement401k.employeeAmount},
+  {id:'envelope',icon:'✉️',label:'Envelope Budgeter',desc:'Set a category spending limit',check:()=>Object.values(S.envelopes).some(v=>v>0)},
+];
+
+function checkAchievements(){
+  let newBadges=[];
+  for(const badge of BADGES){
+    if(S.achievements[badge.id])continue;
+    try{if(badge.check()){S.achievements[badge.id]={unlocked:true,unlockedDate:todayStr()};newBadges.push(badge);}}catch(e){}
+  }
+  if(newBadges.length>0){save('achievements');showAchievementToast(newBadges[0]);}
+}
+
+function showAchievementToast(badge){
+  const t=document.getElementById('save-toast'),m=document.getElementById('toast-msg');
+  if(t&&m){t.classList.remove('manual');t.classList.add('manual');m.textContent=badge.icon+' '+badge.label+' unlocked!';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+}
+
+function renderAchievements(){
+  const unlocked=BADGES.filter(b=>S.achievements[b.id]);
+  const locked=BADGES.filter(b=>!S.achievements[b.id]);
+  const pct=BADGES.length>0?Math.round((unlocked.length/BADGES.length)*100):0;
+  let h='<div class="section">';
+  h+='<div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px">';
+  h+='<div><div class="label" style="margin:0">Achievements</div>';
+  h+='<div style="font-size:10px;color:var(--mut);margin-top:2px">'+unlocked.length+' / '+BADGES.length+' unlocked</div></div>';
+  h+='<div style="font-size:24px;font-weight:300;color:var(--acc)">'+pct+'%</div></div>';
+  h+='<div class="prog mb14" style="height:5px"><div class="prog-fill" style="width:'+pct+'%;background:linear-gradient(90deg,var(--acc2),var(--acc))"></div></div>';
+  if(unlocked.length){
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:16px">';
+    for(const b of unlocked){h+='<div style="padding:10px;background:var(--accd);border:1px solid rgba(168,199,255,0.2);border-radius:var(--radius-sm);text-align:center"><div style="font-size:22px;margin-bottom:4px">'+b.icon+'</div><div style="font-size:10px;font-weight:bold;color:var(--acc);margin-bottom:2px">'+b.label+'</div><div style="font-size:8px;color:var(--mut)">'+b.desc+'</div></div>';}
+    h+='</div>';
+  }
+  if(locked.length){
+    h+='<div style="font-size:8px;letter-spacing:2px;color:var(--mut2);margin-bottom:6px">LOCKED</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px">';
+    for(const b of locked){h+='<div style="padding:10px;background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--radius-sm);text-align:center;opacity:0.5"><div style="font-size:22px;margin-bottom:4px;filter:grayscale(1) opacity(0.4)">'+b.icon+'</div><div style="font-size:10px;color:var(--mut);margin-bottom:2px">'+b.label+'</div><div style="font-size:8px;color:var(--mut2)">'+b.desc+'</div></div>';}
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+// ── Tax Bracket Calculator ─────────────────────────────────────────────────
+function renderTaxBrackets(hourlyRate){
+  const rate=hourlyRate||parseFloat(S.schedule.hourlyRate)||0;
+  if(!rate)return'';
+  let wkHrs=0;
+  for(let d=0;d<7;d++){const sh=S.schedule.shifts[d];if(!sh.active)continue;const sm=toMin(sh.start),em=toMin(sh.end);const dur=em<sm?em+1440-sm:em-sm;wkHrs+=dur/60;}
+  const siWeekly=S.sideIncome.filter(s=>s.frequency!=='one-time').reduce((t,s)=>t+toWeekly({amount:s.amount,frequency:s.frequency}),0);
+  const annGross=(wkHrs*rate+siWeekly)*52;
+  if(annGross<=0)return'';
+  const stdDed=15700;
+  const taxableIncome=Math.max(0,annGross-stdDed);
+  const totalDedAnn=S.deductions.filter(d=>d.type==='flat').reduce((s,d)=>s+(parseFloat(d.value)||0),0)*52
+    +S.deductions.filter(d=>d.type==='percent').reduce((s,d)=>s+(annGross*(parseFloat(d.value)||0)/100),0);
+  const brackets=[{min:0,max:11925,rate:10},{min:11925,max:48475,rate:12},{min:48475,max:103350,rate:22},{min:103350,max:197300,rate:24},{min:197300,max:250525,rate:32},{min:250525,max:626350,rate:35},{min:626350,max:Infinity,rate:37}];
+  let totalTax=0;const bracketRows=[];
+  for(const b of brackets){if(taxableIncome<=b.min)break;const taxable=Math.min(taxableIncome,b.max)-b.min;const tax=taxable*b.rate/100;totalTax+=tax;bracketRows.push({rate:b.rate,taxable,tax});}
+  const effectiveRate=annGross>0?(totalTax/annGross*100):0;
+  const marginalBracket=brackets.find(b=>taxableIncome<=b.max)||brackets[brackets.length-1];
+  const afterTax=annGross-totalTax-totalDedAnn;
+  let h='<div class="card mt20" style="border-left:2px solid var(--org)">';
+  h+='<div class="label">Federal Tax Estimate</div>';
+  h+='<div style="font-size:10px;color:var(--mut);margin-bottom:12px;line-height:1.6">Based on your schedule ('+wkHrs.toFixed(0)+'h/wk \u00d7 $'+rate.toFixed(2)+'), single filer, standard deduction.</div>';
+  h+='<div class="stat-row" style="margin-bottom:14px">';
+  h+='<div class="stat-box" style="border-top:2px solid var(--org)"><div class="sl">Effective Rate</div><div class="sv" style="color:var(--org)">'+effectiveRate.toFixed(1)+'%</div></div>';
+  h+='<div class="stat-box" style="border-top:2px solid var(--red)"><div class="sl">Marginal</div><div class="sv" style="color:var(--red)">'+marginalBracket.rate+'%</div></div>';
+  h+='<div class="stat-box" style="border-top:2px solid var(--grn)"><div class="sl">After Tax</div><div class="sv" style="color:var(--grn)">'+fmt$(afterTax/12)+'/mo</div></div>';
+  h+='</div>';
+  h+='<div style="font-size:8px;letter-spacing:2px;color:var(--mut);margin-bottom:6px">BRACKET BREAKDOWN</div>';
+  for(const br of bracketRows){const pct=(br.tax/totalTax*100)||0;h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="width:28px;font-size:10px;color:var(--org);text-align:right;font-weight:bold">'+br.rate+'%</span><div style="flex:1;height:4px;background:var(--surf3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:var(--org);border-radius:2px"></div></div><span style="font-size:9px;color:var(--mut);width:55px;text-align:right">'+fmt$(br.tax)+'</span></div>';}
+  h+='<div class="row bold" style="margin-top:8px"><span class="rl">Est. Federal Tax</span><span class="rr" style="color:var(--red)">'+fmt$(totalTax)+'/yr</span></div>';
+  h+='<div class="row"><span class="rl">Gross Income</span><span class="rr">'+fmt$(annGross)+'/yr</span></div>';
+  h+='<div class="row"><span class="rl">Standard Deduction</span><span class="rr" style="color:var(--grn)">-'+fmt$(stdDed)+'</span></div>';
+  h+='<div class="row"><span class="rl">Taxable Income</span><span class="rr">'+fmt$(taxableIncome)+'</span></div>';
+  if(parseFloat(S.taxRate)>0){const userEst=annGross*(parseFloat(S.taxRate)/100);const diff=userEst-totalTax;h+='<div style="margin-top:10px;padding:8px 10px;background:var(--accd);border-radius:var(--radius-xs);font-size:10px;color:var(--txt2);line-height:1.6">Your Setup tax rate ('+S.taxRate+'%) estimates '+fmt$(userEst)+'/yr. '+(Math.abs(diff)>500?'That\u2019s <span style="color:'+(diff>0?'var(--org)':'var(--grn)')+'">'+fmt$(Math.abs(diff))+(diff>0?' higher':' lower')+'</span> than this federal-only estimate. State/local taxes, FICA, etc. may account for the difference.':'That\u2019s close to this federal-only estimate.')+'</div>';}
+  h+='<div style="font-size:8px;color:var(--mut2);margin-top:8px">Estimate only. Does not include FICA (7.65%), state, or local taxes.</div>';
+  h+='</div>';
+  return h;
+}
+
 function renderDeductionsTab(now,rate,ws,wk){
   const thisWk=S.log[wk]||{},shift=getActiveShift(now);
   const todayDk=shift?dayKey(shift.date):dayKey(now);
@@ -2394,6 +2969,7 @@ function renderDeductionsTab(now,rate,ws,wk){
         <button class="btn-acc" onclick="addDed()">Add</button>
       </div>
     </div>
+    ${renderTaxBrackets(rate)}
   </div>`;
 }
 function setNewDedType(t){_newDed.type=t;render();}
@@ -2538,6 +3114,14 @@ function renderSetupTab(){
       </div>
     </div>
 
+    <!-- Annual Goal -->
+    <div class="card mt14" style="border:1px solid var(--bdrh)">
+      <div class="label">Annual Earnings Goal</div>
+      <div style="font-size:10px;color:var(--mut);margin-bottom:10px;line-height:1.6">Track your year-to-date progress in History → YTD.</div>
+      <div id="annual-goal-calc"></div>
+      <div class="inp-row"><span class="pre" style="font-size:18px;color:var(--acc)">$</span><input id="s-annual" type="number" min="0" step="1000" placeholder="Annual target" value="${S.schedule.annualGoal||''}" style="border:none;background:transparent;font-size:22px;padding:8px 4px"></div>
+    </div>
+
     <!-- Income Safety Threshold -->
     <div class="card mt14" style="border:1px solid var(--bdrh)">
       <div class="label">Income Safety Floor</div>
@@ -2555,8 +3139,52 @@ function renderSetupTab(){
       </div>
     </div>
 
+    <!-- Achievements -->
+    <div class="card mt14" style="border:1px solid var(--bdrh)">
+      ${renderAchievements()}
+    </div>
+
+    <!-- Re-run Wizard -->
+    <div class="mt14" style="text-align:center">
+      <button class="btn-ghost btn-sm" style="color:var(--acc)" onclick="openWizard()">🔄 Re-run Setup Wizard</button>
+    </div>
+
+    <!-- Theme & Accent -->
+    <div class="card mt14" style="border:1px solid var(--bdrh)">
+      <div class="label">Theme</div>
+      <div class="flex gap8 mb12">
+        ${[['midnight','\u{1f30c}','Midnight'],['amoled','\u25fc','AMOLED'],['light','\u2600','Light']].map(([v,ic,l])=>'<button style="flex:1;padding:10px 8px;text-align:center;border:1px solid '+((S.theme||'midnight')===v?'var(--acc)':'var(--bdr)')+';background:'+((S.theme||'midnight')===v?'var(--accd)':'transparent')+';color:'+((S.theme||'midnight')===v?'var(--acc)':'var(--mut)')+'" onclick="setTheme(\''+v+'\');renderSetupTab()"><div style="font-size:16px;margin-bottom:3px">'+ic+'</div><div style="font-size:9px;letter-spacing:1px">'+l+'</div></button>').join('')}
+      </div>
+      <div class="label">Accent Color</div>
+      <div class="flex" style="flex-wrap:wrap;gap:8px">
+        ${ACCENT_PRESETS.map(p=>{
+          const active=(!S.accentColor&&p.id==='default')||(S.accentColor===p.hex);
+          return '<button style="width:36px;height:36px;border-radius:50%;background:'+p.hex+';border:2px solid '+(active?'var(--txt)':'transparent')+';box-shadow:'+(active?'0 0 0 3px var(--accd),0 0 12px '+p.hex+'44':'none')+';transition:all 0.2s" onclick="setAccent(\''+(p.id==='default'?'':p.hex)+'\')" title="'+p.label+'"></button>';
+        }).join('')}
+      </div>
+    </div>
+
     <button class="btn-acc mt18" style="width:100%;padding:14px;font-size:11px;letter-spacing:3px" onclick="saveSetup()">Save Schedule</button>
   </div>`;
+  // Populate annual goal auto-calc
+  setTimeout(()=>{
+    const calcEl=document.getElementById('annual-goal-calc');
+    if(calcEl){
+      const est=calcAnnualGoalEstimate();
+      if(est&&est.wkHrs>0){
+        const target=Math.round(est.annNet||est.annGross);
+        calcEl.innerHTML='<div style="padding:10px;background:var(--accd);border:1px solid var(--bdr);border-radius:var(--radius-xs);margin-bottom:10px">'
+          +'<div style="font-size:8px;letter-spacing:2px;color:var(--mut);margin-bottom:4px">PROJECTED FROM SCHEDULE</div>'
+          +'<div style="font-size:10px;color:var(--txt);line-height:1.7">'
+          +est.wkHrs.toFixed(1)+'h/wk'+(est.siWeekly>0?' + '+fmt$(est.siWeekly*52/12)+'/mo side income':'')
+          +' → <span style="color:var(--acc);font-weight:bold">'+fmt$(target)+'/yr</span>'
+          +(est.taxPct>0?' <span style="color:var(--mut)">(after '+est.taxPct+'% tax)</span>':'')
+          +'</div>'
+          +'<button class="btn-ghost btn-sm mt6" style="color:var(--acc)" onclick="document.getElementById(&quot;s-annual&quot;).value=&quot;'+target+'&quot;">'
+          +'Use '+fmt$(target)+'</button></div>';
+      }
+    }
+  },0);
 }
 function setSchOtMode(v){
   if(!_editSch)return;
@@ -2584,10 +3212,12 @@ function toggleShift(dow){
   const ota=document.getElementById('s-ota')?.value;
   const otm=document.getElementById('s-otm2')?.value;
   const tax=document.getElementById('s-tax')?.value;
+  const annG=document.getElementById('s-annual')?.value;
   if(rate!==undefined)_editSch.hourlyRate=rate;
   if(ota!==undefined)_editSch.overtimeAfter=ota;
   if(otm!==undefined)_editSch.overtimeMultiplier=otm;
   if(tax!==undefined)_editSch.taxRate=tax;
+  if(annG!==undefined)_editSch.annualGoal=annG;
   _editSch.shifts[dow].active=!_editSch.shifts[dow].active;
   renderSetupTab();
 }
@@ -2598,10 +3228,12 @@ function applyPreset(p){
   const ota=document.getElementById('s-ota')?.value;
   const otm=document.getElementById('s-otm2')?.value;
   const tax=document.getElementById('s-tax')?.value;
+  const annG=document.getElementById('s-annual')?.value;
   if(rate!==undefined)_editSch.hourlyRate=rate;
   if(ota!==undefined)_editSch.overtimeAfter=ota;
   if(otm!==undefined)_editSch.overtimeMultiplier=otm;
   if(tax!==undefined)_editSch.taxRate=tax;
+  if(annG!==undefined)_editSch.annualGoal=annG;
   for(let d=0;d<7;d++)_editSch.shifts[d]={active:p.days.includes(d),start:p.start,end:p.end};
   renderSetupTab();
 }
@@ -2620,7 +3252,9 @@ function applyBulk(){
   if(wst!==undefined)_editSch.weekStartTime=wst;
   if(ota!==undefined)_editSch.overtimeAfter=ota;
   if(otm!==undefined)_editSch.overtimeMultiplier=otm;
+  const annG2=document.getElementById('s-annual')?.value;
   if(tax!==undefined)_editSch.taxRate=tax;
+  if(annG2!==undefined)_editSch.annualGoal=annG2;
   for(let d=0;d<7;d++){if(_editSch.shifts[d].active){if(s)_editSch.shifts[d].start=s;if(e)_editSch.shifts[d].end=e;}}
   renderSetupTab();
 }
@@ -2636,7 +3270,9 @@ function saveSetup(){
   const ota=document.getElementById('s-ota')?.value||'';
   const otm=document.getElementById('s-otm2')?.value||'';
   const tax=document.getElementById('s-tax')?.value||'';
+  const annual=document.getElementById('s-annual')?.value||'';
   _editSch.hourlyRate=rate;_editSch.weekStartDay=wsd;_editSch.weekStartTime=wst;
+  _editSch.annualGoal=annual;
   _editSch.overtimeAfter=ota;_editSch.overtimeMultiplier=otm;
   S.taxRate=tax;S.schedule={..._editSch};
   S.pause={paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null};
@@ -3012,6 +3648,8 @@ function renderBudgetOverview(){
         +'<div style="font-size:9px;color:var(--mut);margin-top:6px">Total: '+fmt$(txTotal)+'</div></div>';
     })()}
 
+    ${renderSpendingVelocity()}
+
     ${upcoming.length?`<div>
       <div class="label">Upcoming One-Time</div>
       ${upcoming.slice(0,5).map(e=>{const cat=catById[e.category]||CATS[CATS.length-1];const due=e.days===0?'Today':e.days===1?'Tomorrow':e.days<0?`${Math.abs(e.days)}d ago`:`In ${e.days}d`;return`<div class="flex" style="justify-content:space-between;align-items:center;padding:9px 12px;background:var(--surf);margin-bottom:6px;border-left:2px solid ${e.days<=3?'var(--acc)':'var(--bdr)'}"><div><div style="font-size:12px"><span style="color:${cat.color}">${cat.icon} </span>${e.label}</div><div style="font-size:9px;color:${e.days<=3?'var(--acc)':'var(--mut)'};margin-top:2px">${due} · ${e.oneTimeDate}</div></div><div style="font-size:14px;font-weight:bold;color:var(--red)">−${fmt$(e.amount)}</div></div>`;}).join('')}
@@ -3021,14 +3659,21 @@ function renderBudgetOverview(){
 
 // ─── BUDGET EXPENSES ─────────────────────────────────────────────────────────
 let _expFilter='all',_showExpForm=false,_editExpId=null,_showEnvelopes=false;
-let _expForm={label:'',category:'housing',customCategory:'',amount:'',frequency:'monthly',oneTimeDate:'',dayOfMonth:'',note:''};
+let _expForm={label:'',category:'housing',customCategory:'',amount:'',frequency:'monthly',oneTimeDate:'',dayOfMonth:'',accountId:''};
 
 function renderBudgetExpenses(){
   const filter=_expFilter;
   const activeExps=S.expenses.filter(e=>!e.archived&&!e._archived);
   const archivedExps=S.expenses.filter(e=>e.archived||e._archived);
   const filtered=activeExps.filter(e=>filter==='all'||(filter==='recurring'&&e.frequency!=='one-time')||(filter==='one-time'&&e.frequency==='one-time'))
-    .sort((a,b)=>{if(a.frequency==='one-time'&&b.frequency!=='one-time')return 1;if(b.frequency==='one-time'&&a.frequency!=='one-time')return-1;return toMonthly(b)-toMonthly(a)});
+    .sort((a,b)=>{
+      if(a.frequency==='one-time'&&b.frequency!=='one-time')return 1;
+      if(b.frequency==='one-time'&&a.frequency!=='one-time')return-1;
+      if(a.frequency==='one-time'&&b.frequency==='one-time')return(a.oneTimeDate||'').localeCompare(b.oneTimeDate||'');
+      const da=parseInt(a.dayOfMonth)||32,db=parseInt(b.dayOfMonth)||32;
+      if(da!==db)return da-db;
+      return toMonthly(b)-toMonthly(a);
+    });
 
   // Envelope summary — always visible as subsection
   const now2=new Date();
@@ -3110,7 +3755,7 @@ function renderBudgetExpenses(){
         <div class="flex gap8 mt10">
           <button class="btn-sm btn-ghost" onclick="openExpForm('${exp.id}')">Edit</button>
           <button class="btn-sm" style="border:1px solid var(--bdr);color:${inactive?'var(--grn)':'var(--mut)'}" onclick="toggleExp('${exp.id}')">${inactive?'Enable':'Pause'}</button>
-          ${exp.frequency==='one-time'?`<button class="btn-sm" style="border:1px solid ${exp.paid?'var(--grn)':'var(--bdr)'};color:${exp.paid?'var(--grn)':'var(--mut)'}" onclick="markPaid('${exp.id}')">${exp.paid?'✓ Paid':'Mark Paid'}</button>`:''}
+          <button class="btn-sm" style="border:1px solid ${exp.paid?'var(--grn)':'var(--bdr)'};color:${exp.paid?'var(--grn)':'var(--mut)'}" onclick="markPaid('${exp.id}')">${exp.paid?'✓ Paid':'Mark Paid'}</button>
           <button class="btn-sm btn-red" onclick="delExp('${exp.id}')">Remove</button>
         </div>
       </div>`;
@@ -3142,7 +3787,8 @@ function saveExpense(){
   const cc=document.getElementById('ef-cc')?.value||'';
   if(!lbl||!amt)return;
   const acctId=document.getElementById('ef-acct')?.value||'';
-  const e={id:_editExpId||Date.now().toString(),label:lbl,category:_expForm.category,customCategory:cc,amount:amt,frequency:freq,oneTimeDate:date,dayOfMonth:dom,active:true,accountId:acctId};
+  const existing=_editExpId?S.expenses.find(x=>x.id===_editExpId):null;
+  const e={id:_editExpId||Date.now().toString(),label:lbl,category:_expForm.category,customCategory:cc,amount:amt,frequency:freq,oneTimeDate:date,dayOfMonth:dom,active:existing?existing.active:true,accountId:acctId};
   if(_editExpId)S.expenses=S.expenses.map(x=>x.id===_editExpId?e:x);
   else S.expenses=[...S.expenses,e];
   save('expenses');_showExpForm=false;_editExpId=null;renderBudgetExpenses();
@@ -3152,7 +3798,7 @@ function toggleExp(id){S.expenses=S.expenses.map(e=>e.id===id?{...e,active:e.act
 function markPaid(id){
   const exp=S.expenses.find(e=>e.id===id);if(!exp)return;
   const wasPaid=exp.paid;
-  S.expenses=S.expenses.map(e=>e.id===id?{...e,paid:!e.paid}:e);
+  S.expenses=S.expenses.map(e=>e.id===id?{...e,paid:!e.paid,paidDate:!e.paid?todayStr():''}:e);
   save('expenses');
   if(exp.accountId){
     const amt=parseFloat(exp.amount)||0;
@@ -3185,34 +3831,6 @@ function archiveOldOneTime(){
 
 // ─── BUDGET FORECAST ─────────────────────────────────────────────────────────
 let _calMonth=new Date().getMonth(),_calYear=new Date().getFullYear();
-function renderEnvelopes(){
-  content.innerHTML=`<div class="page">
-    <div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div class="label" style="margin:0">Envelope Budgets</div>
-      <div style="font-size:9px;color:var(--mut)">Monthly limits per category</div>
-    </div>
-    ${CATS.filter(c=>c.id!=='custom').map(cat=>{
-      const spent=S.expenses.filter(e=>e.active!==false&&e.category===cat.id&&e.frequency!=='one-time').reduce((s,e)=>s+toMonthly(e),0);
-      const limit=S.envelopes[cat.id]||0;
-      const pct=limit>0?Math.min(100,(spent/limit)*100):0;
-      const over=limit>0&&spent>limit;
-      return`<div style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <span style="font-size:11px"><span style="color:${cat.color}">${cat.icon}</span> ${cat.label}</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:9px;color:${over?'var(--red)':limit>0?'var(--mut)':'var(--mut2)'}">${fmt$(spent)}${limit?` / ${fmt$(limit)}`:' spent'}</span>
-            <div style="display:flex;align-items:center;border:1px solid var(--bdrh);background:var(--bg)">
-              <span style="padding:0 6px;color:var(--mut);font-size:11px">$</span>
-              <input type="number" min="0" step="10" placeholder="No limit" value="${limit||''}" onblur="setEnvLimit('${cat.id}',this.value)" style="border:none;background:transparent;font-size:11px;padding:4px;width:70px;color:var(--txt)">
-            </div>
-          </div>
-        </div>
-        ${limit?`<div class="prog"><div class="prog-fill" style="width:${pct}%;background:${over?'var(--red)':pct>80?'var(--org)':'var(--grn)'}"></div></div>`:'<div style="height:3px;background:var(--bdr);border-radius:1px"></div>'}
-      </div>`;
-    }).join('')}
-  </div>`;
-}
-
 // calPrev/calNext used by Calendar app
 function calPrev(){if(_calMonth===0){_calMonth=11;_calYear--;}else _calMonth--;renderCalApp();}
 function calNext(){if(_calMonth===11){_calMonth=0;_calYear++;}else _calMonth++;renderCalApp();}
@@ -4150,7 +4768,7 @@ function renderNetWorth(){
           <div class="label2">Net Worth</div>
           <div style="font-size:36px;font-weight:bold;color:${netWorth>=0?'var(--grn)':'var(--red)'};line-height:1">${fmt$(netWorth,true)}</div>
         </div>
-        <button class="btn-ghost btn-sm" style="color:var(--grn)" onclick="takeSnapshot()">📷 Snapshot</button>
+        ${_snapConfirm?'<div style="display:flex;gap:6px;align-items:center"><input id="snap-note" placeholder="Note (optional)" style="font-size:11px;width:120px"><button class="btn-sm" style="border:1px solid var(--grn);color:var(--grn)" onclick="takeSnapshot()">Confirm</button><button class="btn-sm" style="color:var(--mut)" onclick="cancelSnapshot()">✕</button></div>':'<button class="btn-ghost btn-sm" style="color:var(--grn)" onclick="takeSnapshot()">📷 Snapshot</button>'}
       </div>
       <div class="flex gap12" style="font-size:10px">
         <div style="border-left:2px solid var(--grn);padding-left:8px"><div style="color:var(--mut);margin-bottom:2px">Total Assets</div><div style="color:var(--grn);font-weight:bold">${fmt$(totalAssets)}</div></div>
@@ -4217,14 +4835,17 @@ function updateAssetValue(id,val){
   S.assets=S.assets.map(a=>a.id===id?{...a,prevValue:a.value,value:String(v),updatedDate:todayStr()}:a);
   save('assets');checkMilestones();
 }
+let _snapConfirm=false;
 function takeSnapshot(){
+  if(!_snapConfirm){_snapConfirm=true;renderNetWorth();return;}
   const totalAssets=S.assets.reduce((s,a)=>s+(parseFloat(a.value)||0),0);
   const totalDebts=S.debts.reduce((s,d)=>s+(parseFloat(d.balance)||0),0);
   const nw=totalAssets-totalDebts;
-  const note=prompt('Optional note for this snapshot (e.g. "Paid off credit card"):');
-  S.snapshots=[...S.snapshots,{id:Date.now().toString(),date:todayStr(),netWorth:nw,assets:totalAssets,debts:totalDebts,note:note||''}];
-  save('snapshots');checkMilestones();renderWorth();
+  const note=document.getElementById('snap-note')?.value||'';
+  S.snapshots=[...S.snapshots,{id:Date.now().toString(),date:todayStr(),netWorth:nw,assets:totalAssets,debts:totalDebts,note:note}];
+  save('snapshots');_snapConfirm=false;checkMilestones();renderWorth();
 }
+function cancelSnapshot(){_snapConfirm=false;renderNetWorth();}
 function delSnapshot(id){S.snapshots=S.snapshots.filter(s=>s.id!==id);save('snapshots');renderSnapshots();}
 
 function renderSnapshots(){
@@ -4354,13 +4975,15 @@ function renderMilestones(){
     <button class="btn-ghost mt14" style="width:100%;border:1px dashed var(--bdrh)" onclick="addCustomMilestone()">+ Custom Milestone</button>
   </div>`;
 }
+let _showMsForm=false,_msForm={label:'',target:''};
 function addCustomMilestone(){
-  const label=prompt('Milestone label:');
-  if(!label)return;
-  const target=parseFloat(prompt('Target net worth amount:'));
-  if(!target&&target!==0)return;
+  _showMsForm=true;_msForm={label:'',target:''};renderMilestones();
+}
+function saveMilestone(){
+  const label=_msForm.label,target=parseFloat(_msForm.target);
+  if(!label||(!target&&target!==0))return;
   S.milestones=[...S.milestones,{id:Date.now().toString(),label,target,achieved:false,achievedDate:null,custom:true}];
-  save('milestones');renderMilestones();
+  save('milestones');_showMsForm=false;renderMilestones();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -4602,8 +5225,6 @@ function renderIncomeTab(){
   </div>`;
 }
 
-// renderSideIncome consolidated — redirect to renderIncomeTab
-function renderSideIncome(){renderIncomeTab();}
 function saveSideIncome(){
   const l=document.getElementById('si-label')?.value,a=document.getElementById('si-amt')?.value;
   if(!l||!a)return;
@@ -4622,9 +5243,9 @@ function saveSideIncome(){
       save('assets');
     }
   }
-  _showSIForm=false;if(S.app==='tracker')renderIncomeTab();else renderSideIncome();
+  _showSIForm=false;renderIncomeTab();
 }
-function delSideIncome(id){S.sideIncome=S.sideIncome.filter(s=>s.id!==id);save('sideIncome');if(S.app==='tracker')renderIncomeTab();else renderSideIncome();}
+function delSideIncome(id){S.sideIncome=S.sideIncome.filter(s=>s.id!==id);save('sideIncome');renderIncomeTab();}
 
 // SAVINGS CHALLENGE
 function renderSavingsChallenge(){
@@ -4768,6 +5389,125 @@ function getExpenseTrend(){
     const total=S.expenses.filter(e=>e.active!==false).reduce((s,e)=>inMonth(e,yr,mo)&&!e.paid?s+expMonthAmt(e,yr,mo):s,0);
     return{label:MONTHS[mo],total};
   }).reverse();
+}
+
+// ── Spending Velocity Chart ──────────────────────────────────────────────────
+function renderSpendingVelocity(){
+  // Need transactions with dates to build daily spend data
+  const now=new Date();
+  const thirtyDaysAgo=new Date(now);thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30);
+
+  // Collect daily spend from transactions + paid one-time expenses
+  const dailySpend={};
+  S.transactions.forEach(t=>{
+    if(!t.date)return;
+    const d=parseLocal(t.date);
+    if(d<thirtyDaysAgo||d>now)return;
+    const amt=parseFloat(t.amount)||0;
+    if(amt>=0&&!((t.type||'').toLowerCase()==='purchase'||(t.type||'').toLowerCase()==='direct debit'))return;
+    const dk=localStr(d);
+    dailySpend[dk]=(dailySpend[dk]||0)+Math.abs(amt);
+  });
+
+  // Also include paid one-time expenses from the period
+  S.expenses.filter(e=>e.paid&&e.frequency==='one-time'&&e.oneTimeDate).forEach(e=>{
+    const d=parseLocal(e.oneTimeDate);
+    if(d<thirtyDaysAgo||d>now)return;
+    const dk=e.oneTimeDate;
+    dailySpend[dk]=(dailySpend[dk]||0)+(parseFloat(e.amount)||0);
+  });
+
+  const days=[];
+  for(let i=29;i>=0;i--){
+    const d=new Date(now);d.setDate(d.getDate()-i);
+    const dk=localStr(d);
+    days.push({date:dk,day:d.getDate(),dow:d.getDay(),spend:dailySpend[dk]||0});
+  }
+
+  const totalSpend=days.reduce((s,d)=>s+d.spend,0);
+  if(totalSpend<=0)return'';
+
+  const avgDaily=totalSpend/30;
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const dayOfMonth=now.getDate();
+  const spentThisMonth=days.filter(d=>parseLocal(d.date).getMonth()===now.getMonth()).reduce((s,dd)=>s+dd.spend,0);
+  const projectedMonthly=dayOfMonth>0?(spentThisMonth/dayOfMonth)*daysInMonth:0;
+  const maxDay=Math.max(...days.map(d=>d.spend),1);
+
+  // Category velocity (top 5 from last 30 days)
+  const catSpend={};
+  S.transactions.forEach(t=>{
+    if(!t.date)return;
+    const d=parseLocal(t.date);
+    if(d<thirtyDaysAgo||d>now)return;
+    const amt=parseFloat(t.amount)||0;
+    if(amt>=0&&!((t.type||'').toLowerCase()==='purchase'||(t.type||'').toLowerCase()==='direct debit'))return;
+    const c=t.category||'custom';
+    catSpend[c]=(catSpend[c]||0)+Math.abs(amt);
+  });
+  const topCats=Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // Build SVG spark chart
+  const W=10,G=1,H=40,TW=days.length*(W+G)-G;
+
+  let h='<div class="mb20">';
+  h+='<div class="label">Spending Velocity</div>';
+
+  // Stat boxes
+  h+='<div class="stat-row mb12">';
+  h+='<div class="stat-box" style="border-top:2px solid var(--red)"><div class="sl">Daily Avg</div><div class="sv" style="color:var(--red)">'+fmt$(avgDaily)+'</div></div>';
+  h+='<div class="stat-box" style="border-top:2px solid var(--org)"><div class="sl">'+MONTHS[now.getMonth()]+' Pace</div><div class="sv" style="color:var(--org)">'+fmt$(projectedMonthly)+'</div></div>';
+  h+='<div class="stat-box" style="border-top:2px solid var(--acc)"><div class="sl">30-Day Total</div><div class="sv">'+fmt$(totalSpend)+'</div></div>';
+  h+='</div>';
+
+  // Bar chart — daily spend bars
+  h+='<svg viewBox="0 0 '+TW+' '+(H+14)+'" style="width:100%;display:block;margin-bottom:8px">';
+  // Average line
+  const avgY=H-Math.max(1,(avgDaily/maxDay)*H);
+  h+='<line x1="0" y1="'+avgY+'" x2="'+TW+'" y2="'+avgY+'" stroke="var(--org)" stroke-width="0.5" stroke-dasharray="3,2" opacity="0.6"/>';
+
+  days.forEach((d,i)=>{
+    const bh=Math.max(0,(d.spend/maxDay)*H);
+    const x=i*(W+G),y=H-bh;
+    const isWeekend=d.dow===0||d.dow===6;
+    const isToday=i===days.length-1;
+    const fill=isToday?'var(--acc)':d.spend>avgDaily*1.5?'var(--red)':isWeekend?'rgba(196,160,255,0.5)':'rgba(255,107,122,0.4)';
+    h+='<rect x="'+x+'" y="'+y+'" width="'+W+'" height="'+Math.max(0.5,bh)+'" fill="'+fill+'" rx="1"/>';
+    // Show day number every 5th day
+    if(i%5===0||isToday)h+='<text x="'+(x+W/2)+'" y="'+(H+10)+'" text-anchor="middle" fill="var(--mut)" font-size="5" font-family="monospace">'+d.day+'</text>';
+  });
+  h+='</svg>';
+
+  // Legend
+  h+='<div class="flex gap10" style="justify-content:center;margin-bottom:12px">';
+  h+='<div style="display:flex;align-items:center;gap:3px;font-size:7px;color:var(--mut)"><div style="width:8px;height:1px;background:var(--org);border-top:1px dashed var(--org)"></div>avg</div>';
+  h+='<div style="display:flex;align-items:center;gap:3px;font-size:7px;color:var(--mut)"><div style="width:8px;height:5px;background:rgba(255,107,122,0.4);border-radius:1px"></div>weekday</div>';
+  h+='<div style="display:flex;align-items:center;gap:3px;font-size:7px;color:var(--mut)"><div style="width:8px;height:5px;background:rgba(196,160,255,0.5);border-radius:1px"></div>weekend</div>';
+  h+='<div style="display:flex;align-items:center;gap:3px;font-size:7px;color:var(--mut)"><div style="width:8px;height:5px;background:var(--red);border-radius:1px"></div>high</div>';
+  h+='</div>';
+
+  // Category velocity — top 5
+  if(topCats.length){
+    h+='<div style="font-size:8px;letter-spacing:2px;color:var(--mut);margin-bottom:6px">CATEGORY VELOCITY (30 DAYS)</div>';
+    topCats.forEach(([catId,amt])=>{
+      const cat=catById[catId]||CATS[CATS.length-1];
+      const dailyAvg=amt/30;
+      const moProj=dailyAvg*daysInMonth;
+      const envLimit=S.envelopes[catId]||0;
+      const pct=envLimit>0?Math.round((moProj/envLimit)*100):0;
+      h+='<div style="margin-bottom:6px">';
+      h+='<div class="flex" style="justify-content:space-between;margin-bottom:2px">';
+      h+='<span style="font-size:10px"><span style="color:'+cat.color+'">'+cat.icon+'</span> '+cat.label+'</span>';
+      h+='<span style="font-size:9px;color:var(--mut)">'+fmt$(dailyAvg)+'/day → '+fmt$(moProj)+'/mo'+(envLimit>0?' ('+pct+'%)':'')+'</span>';
+      h+='</div>';
+      if(envLimit>0){
+        h+='<div class="prog"><div class="prog-fill" style="width:'+Math.min(100,pct)+'%;background:'+(pct>100?'var(--red)':pct>80?'var(--org)':cat.color)+'"></div></div>';
+      }
+      h+='</div>';
+    });
+  }
+  h+='</div>';
+  return h;
 }
 
 // BILL NEGOTIATION TRACKER
@@ -5034,7 +5774,7 @@ function handleTxPaste(){
 function processTxRaw(){
   const rows=parseImportText(_txWizard.rawText);
   if(!rows.length){
-    alert('Could not parse any transactions. Make sure the AI output has lines starting with TX+> or TX-> like:\n\nTX->2026-02-01|16.71|transport|Shell\nTX+>2026-02-04|333.53|income|Amazon Payroll');
+    const t=document.getElementById('save-toast'),m=document.getElementById('toast-msg');if(t&&m){t.classList.remove('manual');t.classList.add('manual');m.textContent='No TX+> or TX-> lines found';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),4000);}
     return;
   }
 
@@ -5043,7 +5783,7 @@ function processTxRaw(){
   const newOnes=rows.filter(r=>!existing.has(r.date+'|'+r.amount+'|'+r.description));
 
   if(!newOnes.length){
-    alert('All '+rows.length+' transactions are already imported (duplicates detected).');
+    const t2=document.getElementById('save-toast'),m2=document.getElementById('toast-msg');if(t2&&m2){t2.classList.remove('manual');t2.classList.add('manual');m2.textContent='All '+rows.length+' transactions already imported';t2.classList.add('show');setTimeout(()=>t2.classList.remove('show'),4000);}
     return;
   }
 
@@ -5080,6 +5820,7 @@ function toggleDataPanel(){
     if(cb)cb.style.display='block';
   }
   p.classList.toggle('open');
+  if(p.classList.contains('open'))updateStorageStatus();
 }
 function closeDataPanel(){document.getElementById('data-panel').classList.remove('open');}
 function clearAllDataStep1(){
@@ -5096,7 +5837,7 @@ function clearAllDataConfirmed(){
     'budget_expenses_v1','budget_goals_v1','budget_debts_v1','envelopes_v1','assets_v1',
     'tax_rate_v1','pin_v1','snapshots_v1','milestones_v1','ret401k_v1','side_income_v1',
     'savings_challenge_v1','transactions_v1','early_deposit_v1','income_thresholds_v1',
-    'auto_cat_rules_v1','__activeApp__'];
+    'auto_cat_rules_v1','wizard_seen_v1','achievements_v1','theme_v1','accent_color_v1','__activeApp__'];
   keys.forEach(k=>localStorage.removeItem(k));
   // Reset state to defaults
   S={
@@ -5110,8 +5851,10 @@ function clearAllDataConfirmed(){
     sideIncome:[],savingsChallenge:null,taxRate:'',earlyDepositDays:0,pin:'',
     calLegendHidden:false,expenses:[],goals:[],debts:[],transactions:[],
     incomeSafetyThresholds:{monthlyFloor:'',notifyOnShortfall:true},autoCatRules:[],
+    theme:'midnight',accentColor:'',wizardSeen:false,achievements:{},
     pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null},
   };
+  applyTheme();
   closeDataPanel();
   render();
   const t=document.getElementById('save-toast'),m=document.getElementById('toast-msg');
@@ -5123,11 +5866,12 @@ function exportJSON(){
     retirement401k:S.retirement401k,sideIncome:S.sideIncome,savingsChallenge:S.savingsChallenge,
     transactions:S.transactions,taxRate:S.taxRate,earlyDepositDays:S.earlyDepositDays,
     incomeSafetyThresholds:S.incomeSafetyThresholds,autoCatRules:S.autoCatRules,
+    theme:S.theme,accentColor:S.accentColor,achievements:S.achievements,
     exportedAt:new Date().toISOString()};
   const json=JSON.stringify(bundle,null,2);
   if(navigator.clipboard)navigator.clipboard.writeText(json).catch(()=>{});
   document.getElementById('import-ta').value=json;
-  alert('Data copied to clipboard and shown below. Paste it somewhere safe.');
+  const te=document.getElementById('save-toast'),me=document.getElementById('toast-msg');if(te&&me){te.classList.remove('manual');te.classList.add('manual');me.textContent='Data copied to clipboard';te.classList.add('show');setTimeout(()=>te.classList.remove('show'),3000);}
 }
 function exportCSV(){
   const rate=parseFloat(S.schedule.hourlyRate)||0,oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
@@ -5181,8 +5925,12 @@ function importJSON(){
     if(bundle.earlyDepositDays!=null){S.earlyDepositDays=bundle.earlyDepositDays;lsSet('early_deposit_v1',S.earlyDepositDays);}
     if(bundle.incomeSafetyThresholds){S.incomeSafetyThresholds=bundle.incomeSafetyThresholds;lsSet('income_thresholds_v1',S.incomeSafetyThresholds);}
     if(bundle.autoCatRules){S.autoCatRules=bundle.autoCatRules;lsSet('auto_cat_rules_v1',S.autoCatRules);}
+    if(bundle.theme){S.theme=bundle.theme;lsSet('theme_v1',S.theme);}
+    if(bundle.achievements){S.achievements=bundle.achievements;lsSet('achievements_v1',S.achievements);}
+    if(bundle.accentColor!=null){S.accentColor=bundle.accentColor;lsSet('accent_color_v1',S.accentColor);}
+    applyTheme();
     showToast(true);closeDataPanel();render();
-  }catch(e){alert('Import failed — make sure you pasted valid JSON.');}
+  }catch(e){const ti=document.getElementById('save-toast'),mi=document.getElementById('toast-msg');if(ti&&mi){ti.classList.remove('manual');ti.classList.add('manual');mi.textContent='Import failed — invalid JSON';ti.classList.add('show');setTimeout(()=>ti.classList.remove('show'),4000);}}
 }
 
 
@@ -5290,8 +6038,11 @@ function saveFabExpense(){
   const amt=parseFloat(document.getElementById('fab-exp-amt')?.value);
   const desc=document.getElementById('fab-exp-desc')?.value||'Manual entry';
   if(!amt)return;
-  S.transactions=[...S.transactions,{id:Date.now().toString(),date:todayStr(),description:desc,amount:-Math.abs(amt),category:_fabExpCat,type:'purchase',imported:false}];
+  const txId=Date.now().toString();
+  S.transactions=[...S.transactions,{id:txId,date:todayStr(),description:desc,amount:-Math.abs(amt),category:_fabExpCat,type:'purchase',imported:false}];
   save('transactions');
+  S.expenses=[...S.expenses,{id:'fab-'+txId,label:desc,category:_fabExpCat,customCategory:'',amount:String(Math.abs(amt)),frequency:'one-time',oneTimeDate:todayStr(),dayOfMonth:'',active:true,paid:true,archived:false,accountId:''}];
+  save('expenses');
   const chk=S.assets.find(a=>a.type==='checking');
   if(chk){
     const prev=parseFloat(chk.value)||0;
@@ -5319,6 +6070,7 @@ if('serviceWorker' in navigator){
 document.getElementById('splash-msg').textContent='Loading…';
 setTimeout(()=>{
   loadState();
+  applyTheme();
   // Sync switcher immediately after load so classes match restored app state
   ['tracker','budget','worth','cal'].forEach(a=>{
     const btn=document.getElementById('sw-'+a);
@@ -5327,6 +6079,7 @@ setTimeout(()=>{
   initPin();
   archiveOldOneTime();
   render();
+  if(shouldShowWizard())openWizard();
   // Fade splash out
   const splash=document.getElementById('splash');
   splash.classList.add('fade');
