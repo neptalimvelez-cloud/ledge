@@ -1009,7 +1009,12 @@ function loadState(){
   if(ist)S.incomeSafetyThresholds={...S.incomeSafetyThresholds,...ist};
   if(acr)S.autoCatRules=acr;
   const edd=lsGet('early_deposit_v1');if(edd!=null)S.earlyDepositDays=edd;
-  if(ps&&ps.dayKey===dayKey(new Date()))S.pause=ps;
+  if(ps&&ps.dayKey){
+    const today=dayKey(new Date());
+    const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+    const yestKey=dayKey(yesterday);
+    if(ps.dayKey===today||ps.dayKey===yestKey)S.pause=ps;
+  }
   // On load: remove log entries only for the specific dates covered by custom shifts
   let logChanged=false;
   for(const cs of S.customShifts){
@@ -1814,17 +1819,19 @@ function handleManualSave(){
 
 function handleBreak(){
   const now=new Date(),p=S.pause;
+  const dk=p.dayKey||dayKey(now);
   if(!p.onBreak){
-    S.pause={...p,onBreak:true,breakStart:now.getTime()};
+    S.pause={...p,onBreak:true,breakStart:now.getTime(),dayKey:dk};
   }else{
     const elapsed=p.breakStart?Math.floor((now-p.breakStart)/1000):0;
-    S.pause={...p,onBreak:false,breakStart:null,accBreakSec:(p.accBreakSec||0)+elapsed};
+    S.pause={...p,onBreak:false,breakStart:null,accBreakSec:(p.accBreakSec||0)+elapsed,dayKey:dk};
   }
   save('pause');
 }
 
 function quickBreak(mins){
-  S.pause={...S.pause,accBreakSec:(S.pause.accBreakSec||0)+mins*60};
+  const dk=S.pause.dayKey||dayKey(new Date());
+  S.pause={...S.pause,accBreakSec:(S.pause.accBreakSec||0)+mins*60,dayKey:dk};
   save('pause');
 }
 
