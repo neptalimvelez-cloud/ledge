@@ -1458,11 +1458,19 @@ function renderTrackerTab(now,rate,ws,wk){
   // Payday projection
   const {projGross,futSec}=(()=>{
     let lm={...thisWk},fSec=0;
+    const liveDk=shift?dayKey(shift.date):null;
     for(let i=0;i<7;i++){
       const dow=(parseInt(S.schedule.weekStartDay||0)+i)%7,sh=S.schedule.shifts[dow];if(!sh?.active)continue;
       const dd=new Date(ws);dd.setDate(ws.getDate()+i);const dk=dayKey(dd);
-      if(sameDay(dd,now))lm[dk]=netSec;
-      else if(dd>now){const sm2=toMin(sh.start),em2=toMin(sh.end),dur=em2<sm2?em2+1440-sm2:em2-sm2;lm[dk]=(lm[dk]||0)+dur*60;fSec+=dur*60;}
+      if(dk===liveDk){
+        // This is the currently active shift — use live seconds
+        lm[dk]=netSec;
+      } else if(!lm[dk]&&!coveredDays.has(dk)){
+        // No logged hours and not a custom shift — project full shift duration
+        const sm2=toMin(sh.start),em2=toMin(sh.end),dur=em2<sm2?em2+1440-sm2:em2-sm2;
+        lm[dk]=dur*60;fSec+=dur*60;
+      }
+      // If lm[dk] already has logged hours, keep them (already worked)
     }
     return{projGross:weekGross(lm,'__x__',0,rate,oa,om,otMode,thisCsG,coveredDays),futSec:fSec};
   })();
@@ -1580,7 +1588,7 @@ function renderTrackerTab(now,rate,ws,wk){
         // Week progress: how far through the pay week
         const wsMs=ws.getTime(),weMs=wkEnd(ws).getTime(),nowMs=now.getTime();
         const wkPct=Math.min(100,Math.max(0,((nowMs-wsMs)/(weMs-wsMs))*100));
-        const totalSchSec=Array.from({length:7},(_,i)=>{const dow=(parseInt(S.schedule.weekStartDay||0)+i)%7,sh=S.schedule.shifts[dow];if(!sh?.active)return 0;const sm=toMin(sh.start),em=toMin(sh.end);return(em<sm?em+1440-sm:em-sm)*60;}).reduce((a,b)=>a+b,0);
+        const totalSchSec=Array.from({length:7},(_,i)=>{const dow=(parseInt(S.schedule.weekStartDay||0)+i)%7,sh=S.schedule.shifts[dow];if(!sh?.active)return 0;const sm=toMin(sh.start),em=toMin(sh.end);const dur=em<sm?em+1440-sm:em-sm;return dur*60;}).reduce((a,b)=>a+b,0);
         const workedSec=totalNetSec;
         // Which day index (0-6) are we on, and how far through it
         const dayIndex=Math.min(6,Math.floor(((nowMs-wsMs)/(weMs-wsMs))*7));
@@ -3035,6 +3043,9 @@ function renderBudgetExpenses(){
     </div>
     ${_expForm.frequency==='one-time'?`<div class="mt8"><div class="label2">Due Date</div><input id="ef-date" type="date" value="${_expForm.oneTimeDate}"></div>`:''}
     ${_expForm.frequency!=='one-time'?`<div class="mt8"><div class="label2">Day of Month (optional — for precise forecast & calendar)</div><input id="ef-dom" type="number" min="1" max="31" placeholder="e.g. 15" value="${_expForm.dayOfMonth||''}" style="width:100px"></div>`:''}
+    <div class="mt8"><div class="label2">Deduct from Account (optional)</div>
+      <select id="ef-acct" style="font-size:11px">${'<option value="">None</option>'+S.assets.filter(a=>ACCOUNT_TYPES.map(t=>t.id).includes(a.type)).map(a=>'<option value="'+a.id+'"'+(_expForm.accountId===a.id?' selected':'')+'>'+a.label+' ('+fmt$(a.value)+')</option>').join('')}</select>
+    </div>
     <div class="flex gap8 mt10">
       <button class="btn-acc f1" onclick="saveExpense()">${_editExpId?'Save Changes':'Add Expense'}</button>
       <button class="btn-ghost" onclick="closeExpForm()">Cancel</button>
@@ -3083,8 +3094,8 @@ function renderBudgetExpenses(){
 function setExpCat(id){_expForm.category=id;renderBudgetExpenses();}
 function openExpForm(id){
   _showExpForm=true;
-  if(id){const e=S.expenses.find(x=>x.id===id);if(e){_editExpId=id;_expForm={label:e.label,category:e.category,customCategory:e.customCategory||'',amount:String(e.amount),frequency:e.frequency,oneTimeDate:e.oneTimeDate||'',dayOfMonth:e.dayOfMonth||'',note:e.note||''};}}
-  else{_editExpId=null;_expForm={label:'',category:'housing',customCategory:'',amount:'',frequency:'monthly',oneTimeDate:'',dayOfMonth:'',note:''};}
+  if(id){const e=S.expenses.find(x=>x.id===id);if(e){_editExpId=id;_expForm={label:e.label,category:e.category,customCategory:e.customCategory||'',amount:String(e.amount),frequency:e.frequency,oneTimeDate:e.oneTimeDate||'',dayOfMonth:e.dayOfMonth||'',note:e.note||'',accountId:e.accountId||''};}}
+  else{_editExpId=null;_expForm={label:'',category:'housing',customCategory:'',amount:'',frequency:'monthly',oneTimeDate:'',dayOfMonth:'',note:'',accountId:''};}
   renderBudgetExpenses();
 }
 function closeExpForm(){_showExpForm=false;_editExpId=null;renderBudgetExpenses();}
@@ -3097,14 +3108,31 @@ function saveExpense(){
   const dom=document.getElementById('ef-dom')?.value||'';
   const cc=document.getElementById('ef-cc')?.value||'';
   if(!lbl||!amt)return;
-  const e={id:_editExpId||Date.now().toString(),label:lbl,category:_expForm.category,customCategory:cc,amount:amt,frequency:freq,oneTimeDate:date,dayOfMonth:dom,active:true};
+  const acctId=document.getElementById('ef-acct')?.value||'';
+  const e={id:_editExpId||Date.now().toString(),label:lbl,category:_expForm.category,customCategory:cc,amount:amt,frequency:freq,oneTimeDate:date,dayOfMonth:dom,active:true,accountId:acctId};
   if(_editExpId)S.expenses=S.expenses.map(x=>x.id===_editExpId?e:x);
   else S.expenses=[...S.expenses,e];
   save('expenses');_showExpForm=false;_editExpId=null;renderBudgetExpenses();
 }
 function delExp(id){S.expenses=S.expenses.filter(e=>e.id!==id);save('expenses');renderBudgetExpenses();}
 function toggleExp(id){S.expenses=S.expenses.map(e=>e.id===id?{...e,active:e.active===false}:e);save('expenses');renderBudgetExpenses();}
-function markPaid(id){S.expenses=S.expenses.map(e=>e.id===id?{...e,paid:!e.paid}:e);save('expenses');renderBudgetExpenses();}
+function markPaid(id){
+  const exp=S.expenses.find(e=>e.id===id);if(!exp)return;
+  const wasPaid=exp.paid;
+  S.expenses=S.expenses.map(e=>e.id===id?{...e,paid:!e.paid}:e);
+  save('expenses');
+  if(exp.accountId){
+    const amt=parseFloat(exp.amount)||0;
+    const acct=S.assets.find(a=>a.id===exp.accountId);
+    if(acct&&amt>0){
+      const prev=parseFloat(acct.value)||0;
+      const nv=wasPaid?prev+amt:prev-amt;
+      S.assets=S.assets.map(a=>a.id===exp.accountId?{...a,prevValue:String(prev),value:String(nv),updatedDate:todayStr()}:a);
+      save('assets');
+    }
+  }
+  renderBudgetExpenses();
+}
 
 // Auto-archive one-time expenses whose month has passed
 function archiveOldOneTime(){
@@ -3227,10 +3255,12 @@ function renderBudgetForecastCalOnly(){
     }
   }
 
-  // Payday markers
+  // Payday markers + amounts
   const paydays=new Set();
+  const paydayAmts={};
   const rate=parseFloat(S.schedule.hourlyRate)||0;
   const offset=parseInt(S.earlyDepositDays)||0;
+  const _oa=S.schedule.overtimeAfter,_om=S.schedule.overtimeMultiplier,_otMode=S.schedule.overtimeMode;
   if(rate){
     const seenWks=new Set();
     for(let d=1;d<=daysInMonth;d++){
@@ -3241,10 +3271,21 @@ function renderBudgetForecastCalOnly(){
       seenWks.add(wsKey);
       const we=wkEnd(ws);
       const payDate=new Date(we);payDate.setDate(payDate.getDate()+1-offset);
-      // Use actual paycheck date if recorded
       const pc=S.paychecks[wsKey];
       const actualPay=pc?.date?parseLocal(pc.date):payDate;
-      if(actualPay.getFullYear()===yr&&actualPay.getMonth()===mo)paydays.add(actualPay.getDate());
+      if(actualPay.getFullYear()===yr&&actualPay.getMonth()===mo){
+        paydays.add(actualPay.getDate());
+        // Calculate amount: actual if entered, else estimate from logged hours
+        if(pc?.amount){
+          paydayAmts[actualPay.getDate()]={amt:pc.amount,actual:true};
+        } else {
+          const dm=S.log[wsKey]||{};
+          const cg=csInWeek(wsKey).reduce((s,c)=>s+csGross(c),0);
+          const gross=weekGross(dm,'__x__',0,rate,_oa,_om,_otMode,cg,csCoveredDays(wsKey));
+          const net=applyDed(gross,S.deductions);
+          if(gross>0)paydayAmts[actualPay.getDate()]={amt:net,actual:false};
+        }
+      }
     }
   }
   // Also mark imported deposit dates as income days
@@ -3305,7 +3346,7 @@ function renderBudgetForecastCalOnly(){
       else if(isSav)cls+=' cal-savings';
       return`<div class="${cls}">
         <div class="cal-day-num">${day}${(isPay||isInc)?'<span style="color:var(--blu);font-size:6px"> $</span>':''}</div>
-        ${dayExps.length?`<div class="cal-lbl">${dayExps[0].label.slice(0,8)}${hasImported?'*':''}</div><div class="cal-amt">-$${total.toFixed(0)}</div>`:isDebt?'<div class="cal-lbl" style="color:var(--org)">debt</div>':''}
+        ${dayExps.length?`<div class="cal-lbl">${dayExps[0].label.slice(0,8)}${hasImported?'*':''}</div><div class="cal-amt">-$${total.toFixed(0)}</div>`:isPay&&paydayAmts[day]?`<div class="cal-lbl" style="color:var(--blu)">${paydayAmts[day].actual?'pay':'~pay'}</div><div style="font-size:7px;color:var(--blu);font-weight:500;margin-top:1px">$${Math.round(paydayAmts[day].amt)}</div>`:isDebt?'<div class="cal-lbl" style="color:var(--org)">debt</div>':''}
       </div>`;
     }).join('')}</div>
     ${(()=>{
@@ -4510,6 +4551,9 @@ function renderIncomeTab(){
         <div class="f1"><div class="label2">Date</div><input id="si-date" type="date"></div>
         <div class="f1"><div class="label2">Note</div><input id="si-note" placeholder="Optional"></div>
       </div>
+      <div class="mb10"><div class="label2">Deposit to Account</div>
+        <select id="si-acct" style="font-size:11px"><option value="">None</option>${S.assets.filter(a=>ACCOUNT_TYPES.map(t=>t.id).includes(a.type)).map(a=>'<option value="'+a.id+'">'+a.label+' ('+fmt$(a.value)+')</option>').join('')}</select>
+      </div>
       <div class="flex gap8"><button class="btn-acc f1" onclick="saveSideIncome()">Add</button><button class="btn-ghost" onclick="_showSIForm=false;renderIncomeTab()">Cancel</button></div>
     </div>`:''}
     ${sorted.length===0&&!_showSIForm?`<div style="text-align:center;padding:20px 0 0;color:var(--mut);font-size:9px;letter-spacing:2px">Track freelance, gig, tips, or any income outside your main job</div>`:''}
@@ -4530,11 +4574,22 @@ function renderSideIncome(){renderIncomeTab();}
 function saveSideIncome(){
   const l=document.getElementById('si-label')?.value,a=document.getElementById('si-amt')?.value;
   if(!l||!a)return;
+  const siAcctId=document.getElementById('si-acct')?.value||'';
   S.sideIncome=[...S.sideIncome,{id:Date.now().toString(),label:l,amount:a,
     frequency:document.getElementById('si-freq')?.value||'one-time',
     date:document.getElementById('si-date')?.value||'',
-    note:document.getElementById('si-note')?.value||''}];
-  save('sideIncome');_showSIForm=false;if(S.app==='tracker')renderIncomeTab();else renderSideIncome();
+    note:document.getElementById('si-note')?.value||'',accountId:siAcctId}];
+  save('sideIncome');
+  if(siAcctId){
+    const amt=parseFloat(a)||0;
+    const acct=S.assets.find(ac=>ac.id===siAcctId);
+    if(acct&&amt>0){
+      const prev=parseFloat(acct.value)||0;
+      S.assets=S.assets.map(ac=>ac.id===siAcctId?{...ac,prevValue:String(prev),value:String(prev+amt),updatedDate:todayStr()}:ac);
+      save('assets');
+    }
+  }
+  _showSIForm=false;if(S.app==='tracker')renderIncomeTab();else renderSideIncome();
 }
 function delSideIncome(id){S.sideIncome=S.sideIncome.filter(s=>s.id!==id);save('sideIncome');if(S.app==='tracker')renderIncomeTab();else renderSideIncome();}
 
@@ -5204,6 +5259,12 @@ function saveFabExpense(){
   if(!amt)return;
   S.transactions=[...S.transactions,{id:Date.now().toString(),date:todayStr(),description:desc,amount:-Math.abs(amt),category:_fabExpCat,type:'purchase',imported:false}];
   save('transactions');
+  const chk=S.assets.find(a=>a.type==='checking');
+  if(chk){
+    const prev=parseFloat(chk.value)||0;
+    S.assets=S.assets.map(a=>a.id===chk.id?{...a,prevValue:String(prev),value:String(prev-Math.abs(amt)),updatedDate:todayStr()}:a);
+    save('assets');
+  }
   _fabExpCat='custom';
   closeFabPanel();showToast(true);
 }
