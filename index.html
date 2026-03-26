@@ -1125,7 +1125,8 @@ function getWeekStart(date,startDay,startTime){
 }
 function wkKey(date){return localStr(getWeekStart(date,S.schedule.weekStartDay,S.schedule.weekStartTime));}
 function wkEnd(ws){const we=new Date(ws);we.setDate(we.getDate()+7);we.setSeconds(we.getSeconds()-1);return we;}
-// Assumed pay date = day after week end, adjusted for early deposit
+// Pay date = week end + 8 days - early deposit offset
+// Hours worked in one week are paid the following week (standard weekly payroll)
 // If a paycheck was actually received (S.paychecks[wkStr].date), use that instead
 function payDateForWeek(wkStr){
   const pc=S.paychecks[wkStr];
@@ -1133,7 +1134,7 @@ function payDateForWeek(wkStr){
   const ws=parseLocal(wkStr);
   const we=wkEnd(ws);
   const pd=new Date(we);
-  pd.setDate(pd.getDate()+1);
+  pd.setDate(pd.getDate()+8); // next week's payday (7 days after week end + 1)
   const offset=parseInt(S.earlyDepositDays)||0;
   pd.setDate(pd.getDate()-offset);
   return pd;
@@ -1664,12 +1665,13 @@ function renderTrackerTab(now,rate,ws,wk){
             </div>`:''}
           </div>
         </div>
-        <div class="card mt10" style="border-left:2px solid var(--bdr)">
-          <div class="label2">This week projection — ${wkLabel}</div>
+        <div class="card mt10" style="border-left:2px solid var(--acc)">
+          <div class="label2">This week earned so far — ${wkLabel}</div>
           <div class="flex" style="justify-content:space-between;align-items:center">
-            <div style="font-size:20px;font-weight:bold;color:var(--mut)">${fmt$(projNet)}</div>
-            <div style="font-size:9px;color:var(--mut);text-align:right">${(futSec/3600).toFixed(1)}h remaining</div>
+            <div style="font-size:20px;font-weight:bold;color:var(--acc)">${fmt$(wNet)}</div>
+            <div style="font-size:9px;color:var(--mut);text-align:right">${(totalNetSec/3600).toFixed(1)}h worked</div>
           </div>
+          ${futSec>0?`<div style="font-size:9px;color:var(--mut);margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr)">If full week: ${fmt$(projNet)} net · ${(futSec/3600).toFixed(1)}h remaining</div>`:''}
         </div>
       </div>`;
     })()}
@@ -1847,21 +1849,13 @@ function quickBreak(mins){
 function autoLogCheck(){
   const now=new Date(),rate=parseFloat(S.schedule.hourlyRate)||0;
   if(!rate)return;
-  // Look at each active day shift — if the shift ended in the last 2 min and nothing logged, auto-log full duration
   const sch=S.schedule;
   for(let dow=0;dow<7;dow++){
     const sh=sch.shifts[dow];if(!sh?.active)continue;
     const sm=toMin(sh.start),em=toMin(sh.end),overnight=em<sm;
-    // Find the date this shift was on
-    const shiftDate=new Date(now);
     if(overnight){
-      // overnight shift started yesterday (dow-1), ends today
       const endMin=now.getHours()*60+now.getMinutes();
       if(now.getDay()===((dow+1)%7)&&endMin>=em&&endMin<em+3){
-        // shift just ended in last 3 min
-        shiftDate.setDate(shiftDate.getDate()-1);
-        shiftDate.setDay&&(shiftDate=new Date(now));
-        // find the start date
         const sd=new Date(now);sd.setDate(sd.getDate()-1);
         if(sd.getDay()===dow){
           const ws=getWeekStart(sd,sch.weekStartDay,sch.weekStartTime);
@@ -1890,6 +1884,45 @@ function autoLogCheck(){
   }
 }
 setInterval(autoLogCheck,60000);
+
+// On app launch: back-fill any missed shifts from the last 2 days
+function backfillMissedShifts(){
+  const now=new Date(),rate=parseFloat(S.schedule.hourlyRate)||0;
+  if(!rate)return;
+  const sch=S.schedule;
+  let changed=false;
+  // Check yesterday and day before for shifts that ended but were never logged
+  for(let daysBack=0;daysBack<=2;daysBack++){
+    const checkDate=new Date(now);checkDate.setDate(checkDate.getDate()-daysBack);
+    const dow=checkDate.getDay();
+    const sh=sch.shifts[dow];if(!sh?.active)continue;
+    const sm=toMin(sh.start),em=toMin(sh.end),overnight=em<sm;
+    const dur=overnight?em+1440-sm:em-sm;
+    // Determine when this shift ended
+    const shiftEnd=new Date(checkDate);
+    if(overnight){
+      shiftEnd.setDate(shiftEnd.getDate()+1);
+      shiftEnd.setHours(Math.floor(em/60),em%60,0,0);
+    } else {
+      shiftEnd.setHours(Math.floor(em/60),em%60,0,0);
+    }
+    // Only back-fill if the shift has fully ended (not currently active)
+    if(now<shiftEnd)continue;
+    const ws=getWeekStart(checkDate,sch.weekStartDay,sch.weekStartTime);
+    const wk=localStr(ws),dk=dayKey(checkDate);
+    // Skip if already logged or covered by custom shift
+    if(S.log[wk]&&S.log[wk][dk])continue;
+    if(csCoveredDays(wk).has(dk))continue;
+    // Skip if the pause state shows this shift was explicitly paused (Left Early)
+    // — pausedAt contains the actual worked seconds
+    const ps=lsGet('pause_v3');
+    if(ps&&ps.paused&&ps.dayKey===dk&&ps.pausedAt!=null)continue;
+    // Log full shift duration
+    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:dur*60}};
+    changed=true;
+  }
+  if(changed){lsSet('log_v3',S.log);}
+}
 
 // Custom shift form
 let _csFormOpen=false,_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:'',gross:''};
@@ -2485,7 +2518,6 @@ function renderSetupTab(){
         ${[['0','None'],['1','1 Day Early'],['2','2 Days Early']].map(([v,l])=>`<button style="flex:1;padding:8px;border:1px solid ${(S.earlyDepositDays||0)==parseInt(v)?'var(--acc)':'var(--bdr)'};background:${(S.earlyDepositDays||0)==parseInt(v)?'var(--accd)':'transparent'};color:${(S.earlyDepositDays||0)==parseInt(v)?'var(--acc)':'var(--mut)'};font-size:9px" onclick="S.earlyDepositDays=${v};save('earlyDepositDays');renderSetupTab()">${l}</button>`).join('')}
       </div>
     </div>
-
     <!-- Tax rate -->
     <div class="section mt14">
       <div class="label">Estimated Tax Rate (for YTD estimate)</div>
@@ -2694,6 +2726,7 @@ function getTxIncome(fromDate,toDate){
 
 function renderBudget(){
   archiveOldOneTime();
+  backfillMissedShifts();
   renderNav();
   renderBudgetHeader();
   const tab=S.budgetTab;
