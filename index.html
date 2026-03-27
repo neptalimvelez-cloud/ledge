@@ -1851,6 +1851,33 @@ function tickTracker(){
   const bb=document.getElementById('break-btn');
   if(bb){bb.textContent=p.onBreak?'■ End Break':'⏱ Break';bb.style.color=p.onBreak?'var(--red)':'#c08050';bb.style.borderColor=p.onBreak?'rgba(192,80,80,.5)':'rgba(192,128,80,.3)';}
 
+  // live day row gradient
+  const ldr=document.getElementById('live-day-row');
+  if(ldr&&shift){
+    const shSm=toMin(shift.shift.start),shEm=toMin(shift.shift.end);
+    const ov=shEm<shSm;
+    const nowMin=now.getHours()*60+now.getMinutes();
+    const nP=(nowMin/1440*100).toFixed(1);
+    const sP=(shSm/1440*100).toFixed(1);
+    const eP=(shEm/1440*100).toFixed(1);
+    const g='rgba(93,232,160,',o='rgba(255,173,107,';
+    if(ov){
+      if(nowMin>=shSm){
+        ldr.style.background=p.onBreak
+          ?'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) 100%)'
+          :'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.2) '+sP+'%,'+g+'0.1) '+nP+'%,transparent '+nP+'%)';
+      }else{
+        ldr.style.background=p.onBreak
+          ?'linear-gradient(180deg,'+g+'0.18) 0%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) '+eP+'%,transparent '+eP+'%,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.1) 100%)'
+          :'linear-gradient(180deg,'+g+'0.2) 0%,'+g+'0.1) '+nP+'%,transparent '+nP+'%,transparent '+eP+'%,transparent '+eP+'%,transparent '+sP+'%,'+g+'0.2) '+sP+'%,'+g+'0.1) 100%)';
+      }
+    }else{
+      ldr.style.background=p.onBreak
+        ?'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) '+eP+'%,transparent '+eP+'%)'
+        :'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.2) '+sP+'%,'+g+'0.1) '+nP+'%,transparent '+nP+'%)';
+    }
+  }
+
   // auto-log full shift when it ends (shift was active, now it's not)
   // This is handled in a separate interval — see autoLogCheck()
 
@@ -1982,26 +2009,48 @@ function renderTrackerTab(now,rate,ws,wk){
     const sec=isCur?netSec:(thisWk[dk]||0);
     const isLive=isCur&&!p.paused;
     const dayE=otMode==='shift'?calcEarnings(sec,rate,oa,om):null;
-    // Shift hue: green for worked, amber for break — fills top-to-bottom by shift progress
+    // Shift hue: 24h vertical timeline — top=00:00, bottom=24:00
     const onBreakNow=isLive&&p.onBreak;
     const shSm=toMin(sh.start),shEm=toMin(sh.end);
     const overnight=shEm<shSm;
     const shDur=overnight?shEm+1440-shSm:shEm-shSm;
     const grnS='rgba(93,232,160,';
     const orgS='rgba(255,173,107,';
-    let workedBg='';
+    // Convert shift start/end to % of 24h day
+    const sPct=(shSm/1440*100).toFixed(1);
+    const ePct=(shEm/1440*100).toFixed(1);
+    let dayBg='';
     if(sec>0&&!isLive){
-      workedBg='background:linear-gradient(180deg,'+grnS+'0.15) 0%,'+grnS+'0.06) 100%);';
+      // Completed shift: fill the shift hours
+      if(overnight){
+        dayBg='background:linear-gradient(180deg,transparent 0%,'+grnS+'0.15) 0%,'+grnS+'0.08) '+ePct+'%,transparent '+ePct+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) 100%);';
+      }else{
+        dayBg='background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) '+ePct+'%,transparent '+ePct+'%);';
+      }
     }
-    let liveBg='';
     if(isLive){
-      const shPct=shDur>0?Math.min(100,Math.round((netSec/(shDur*60))*100)):0;
-      liveBg=onBreakNow
-        ?'background:linear-gradient(180deg,'+grnS+'0.18) 0%,'+grnS+'0.14) '+shPct+'%,'+orgS+'0.18) '+shPct+'%,'+orgS+'0.08) 100%);'
-        :'background:linear-gradient(180deg,'+grnS+'0.2) 0%,'+grnS+'0.1) '+shPct+'%,transparent '+shPct+'%);';
+      // Current time-of-day as % of 24h
+      const nowMin=now.getHours()*60+now.getMinutes();
+      const nowPct=(nowMin/1440*100).toFixed(1);
+      if(overnight){
+        if(nowMin>=shSm){
+          // Pre-midnight: green from shift start to now, rest of shift unfilled
+          dayBg=onBreakNow
+            ?'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) 100%);'
+            :'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%);';
+        }else{
+          // Post-midnight: pre-midnight portion fully green + post-midnight green to now
+          dayBg=onBreakNow
+            ?'background:linear-gradient(180deg,'+grnS+'0.18) 0%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) '+ePct+'%,transparent '+ePct+'%,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.1) 100%);'
+            :'background:linear-gradient(180deg,'+grnS+'0.2) 0%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%,transparent '+ePct+'%,transparent '+ePct+'%,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) 100%);';
+        }
+      }else{
+        dayBg=onBreakNow
+          ?'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) '+ePct+'%,transparent '+ePct+'%);'
+          :'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%);';
+      }
     }
-    const dayBg=isLive?liveBg:workedBg;
-    return`<div class="day-row" style="opacity:${sh.active?1:.28};${dayBg}${isLive?'border-radius:4px;':''}">
+    return`<div class="day-row" ${isLive?'id="live-day-row" ':''}style="opacity:${sh.active?1:.28};${dayBg}${isLive?'border-radius:4px;':''}">
       <div class="flex" style="align-items:center;gap:10px">
         <span class="day-dot${isLive?(onBreakNow?' on-break':' live'):sec>0?' done':''}"></span>
         <span style="font-size:12px;width:28px;color:${isLive?'var(--txt)':'var(--mut)'};font-weight:${isLive?'bold':'normal'}">${DAYS[dow]}</span>
