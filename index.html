@@ -1982,7 +1982,7 @@ function renderTrackerTab(now,rate,ws,wk){
     const sec=isCur?netSec:(thisWk[dk]||0);
     const isLive=isCur&&!p.paused;
     const dayE=otMode==='shift'?calcEarnings(sec,rate,oa,om):null;
-    // Shift hue: green for worked, yellow for break, gradient for live
+    // Shift hue: green for worked, yellow for break, gradient for live (top-to-bottom)
     const onBreakNow=isLive&&p.onBreak;
     const shSm=toMin(sh.start),shEm=toMin(sh.end);
     const overnight=shEm<shSm;
@@ -1993,9 +1993,9 @@ function renderTrackerTab(now,rate,ws,wk){
     let workedBg='';
     if(sec>0&&!isLive){
       if(overnight){
-        workedBg='background:linear-gradient(90deg,rgba(93,232,160,0.06) 0%,rgba(93,232,160,0.03) '+endPct+'%,transparent '+endPct+'%,transparent '+startPct+'%,rgba(93,232,160,0.06) '+startPct+'%,rgba(93,232,160,0.03) 100%);';
+        workedBg='background:linear-gradient(180deg,rgba(93,232,160,0.15) 0%,rgba(93,232,160,0.08) '+endPct+'%,transparent '+endPct+'%,transparent '+startPct+'%,rgba(93,232,160,0.15) '+startPct+'%,rgba(93,232,160,0.08) 100%);';
       }else{
-        workedBg='background:linear-gradient(90deg,transparent '+startPct+'%,rgba(93,232,160,0.06) '+startPct+'%,rgba(93,232,160,0.03) '+endPct+'%,transparent '+endPct+'%);';
+        workedBg='background:linear-gradient(180deg,transparent '+startPct+'%,rgba(93,232,160,0.15) '+startPct+'%,rgba(93,232,160,0.08) '+endPct+'%,transparent '+endPct+'%);';
       }
     }
     let liveBg='';
@@ -2010,19 +2010,19 @@ function renderTrackerTab(now,rate,ws,wk){
         if(fillPct<=endPct){
           // Progress has wrapped past midnight into next-day portion
           liveBg=onBreakNow
-            ?'background:linear-gradient(90deg,'+grnS+'0.08) 0%,'+grnS+'0.08) '+fillPct+'%,'+orgS+'0.1) '+fillPct+'%,'+orgS+'0.06) '+endPct+'%,transparent '+endPct+'%,transparent '+startPct+'%,'+grnS+'0.08) '+startPct+'%,'+grnS+'0.06) 100%);'
-            :'background:linear-gradient(90deg,'+grnS+'0.1) 0%,'+grnS+'0.06) '+fillPct+'%,transparent '+fillPct+'%,transparent '+endPct+'%,transparent '+endPct+'%,transparent '+startPct+'%,'+grnS+'0.1) '+startPct+'%,'+grnS+'0.06) 100%);';
+            ?'background:linear-gradient(180deg,'+grnS+'0.18) 0%,'+grnS+'0.18) '+fillPct+'%,'+orgS+'0.2) '+fillPct+'%,'+orgS+'0.12) '+endPct+'%,transparent '+endPct+'%,transparent '+startPct+'%,'+grnS+'0.18) '+startPct+'%,'+grnS+'0.12) 100%);'
+            :'background:linear-gradient(180deg,'+grnS+'0.2) 0%,'+grnS+'0.12) '+fillPct+'%,transparent '+fillPct+'%,transparent '+endPct+'%,transparent '+endPct+'%,transparent '+startPct+'%,'+grnS+'0.2) '+startPct+'%,'+grnS+'0.12) 100%);';
         }else{
           // Still in the pre-midnight portion
           liveBg=onBreakNow
-            ?'background:linear-gradient(90deg,transparent 0%,transparent '+startPct+'%,'+grnS+'0.08) '+startPct+'%,'+grnS+'0.08) '+fillPct+'%,'+orgS+'0.1) '+fillPct+'%,'+orgS+'0.06) 100%);'
-            :'background:linear-gradient(90deg,transparent 0%,transparent '+startPct+'%,'+grnS+'0.1) '+startPct+'%,'+grnS+'0.06) '+fillPct+'%,transparent '+fillPct+'%);';
+            ?'background:linear-gradient(180deg,transparent 0%,transparent '+startPct+'%,'+grnS+'0.18) '+startPct+'%,'+grnS+'0.18) '+fillPct+'%,'+orgS+'0.2) '+fillPct+'%,'+orgS+'0.12) 100%);'
+            :'background:linear-gradient(180deg,transparent 0%,transparent '+startPct+'%,'+grnS+'0.2) '+startPct+'%,'+grnS+'0.12) '+fillPct+'%,transparent '+fillPct+'%);';
         }
       }else{
         const absFillPct=startPct+((endPct-startPct)*shPct/100);
         liveBg=onBreakNow
-          ?'background:linear-gradient(90deg,transparent '+startPct+'%,'+grnS+'0.08) '+startPct+'%,'+grnS+'0.08) '+absFillPct+'%,'+orgS+'0.1) '+absFillPct+'%,'+orgS+'0.06) '+endPct+'%,transparent '+endPct+'%);'
-          :'background:linear-gradient(90deg,transparent '+startPct+'%,'+grnS+'0.1) '+startPct+'%,'+grnS+'0.06) '+absFillPct+'%,transparent '+absFillPct+'%);';
+          ?'background:linear-gradient(180deg,transparent '+startPct+'%,'+grnS+'0.18) '+startPct+'%,'+grnS+'0.18) '+absFillPct+'%,'+orgS+'0.2) '+absFillPct+'%,'+orgS+'0.12) '+endPct+'%,transparent '+endPct+'%);'
+          :'background:linear-gradient(180deg,transparent '+startPct+'%,'+grnS+'0.2) '+startPct+'%,'+grnS+'0.12) '+absFillPct+'%,transparent '+absFillPct+'%);';
       }
     }
     const dayBg=isLive?liveBg:workedBg;
