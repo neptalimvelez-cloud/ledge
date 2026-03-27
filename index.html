@@ -799,15 +799,6 @@ button{
 .bal-num{font-size:38px;font-weight:300;line-height:1;letter-spacing:-1px}
 
 /* ── Debt payoff ────────────────────────────────────── */
-.payoff-item{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:11px 14px;
-  background:var(--surf);
-  border:1px solid var(--bdr);
-  border-radius:var(--radius-sm);
-  border-left:2px solid var(--grn);
-  margin-bottom:6px;
-}
 .payoff-num{
   width:22px;height:22px;border-radius:50%;
   background:rgba(93,232,160,0.1);
@@ -842,8 +833,8 @@ button{
 /* ── Gap helpers ────────────────────────────────────── */
 .mt4{margin-top:4px}.mt6{margin-top:6px}.mt8{margin-top:8px}.mt10{margin-top:10px}.mt12{margin-top:12px}.mt14{margin-top:14px}.mt16{margin-top:16px}.mt18{margin-top:18px}.mt20{margin-top:20px}
 .mb4{margin-bottom:4px}.mb6{margin-bottom:6px}.mb8{margin-bottom:8px}.mb10{margin-bottom:10px}.mb12{margin-bottom:12px}.mb14{margin-bottom:14px}.mb16{margin-bottom:16px}.mb20{margin-bottom:20px}
-.flex{display:flex}.gap8{gap:8px}.gap10{gap:10px}.gap6{gap:6px}
-.f1{flex:1}.f2{flex:2}.bold{font-weight:600}
+.flex{display:flex}.gap6{gap:6px}.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}.gap14{gap:14px}
+.f1{flex:1}.bold{font-weight:600}.items-center{align-items:center}
 
 /* ── Color helpers ──────────────────────────────────── */
 .green{color:var(--grn)}.red{color:var(--red)}.acc{color:var(--acc)}.blue{color:var(--blu)}.pur{color:var(--pur)}.org{color:var(--org)}.mut{color:var(--mut)}
@@ -2420,6 +2411,8 @@ function delBreakEntry(wk,dk,id){
   save('breakLog');
   renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
 }
+// Add-break inline form state for history day rows
+let _addBreak=null; // {wk, dk} when the inline add-break form is open
 function openAddBreak(wk,dk){_addBreak={wk,dk};renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
 function closeAddBreak(){_addBreak=null;renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
 function confirmAddBreak(wk,dk){
@@ -2667,8 +2660,9 @@ function renderHistoryTab(rate){
           const dg=calcEarnings(sec,rate,oa,om);
           const sh=S.schedule.shifts[dd.getDay()];
           const shStart=sh?.start||'';
-          // Pre-init _hdtStart so editing only the end field works without touching start
+          // Pre-init _hdtStart from schedule so editing only end time works
           if(shStart) _hdtStart[dk]=shStart;
+          const pendingEnd=_hdtEnd[dk];
           let h='';
           h+='<div style="padding:8px 0;border-bottom:1px solid var(--bdr)">';
           h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:4px">';
@@ -2676,7 +2670,8 @@ function renderHistoryTab(rate){
           h+='<span style="font-size:10px;color:var(--mut);width:66px">'+dk+'</span>';
           h+='<input type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift start">';
           h+='<span style="font-size:9px;color:var(--mut)">→</span>';
-          h+='<input type="time" value="" onchange="editHistDayEnd(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift end — set to update hours">';
+          h+='<input type="time" value="'+(pendingEnd?pendingEnd.v:'')+'" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift end">';
+          h+='<span id="hde-apply-'+dk+'" style="opacity:'+(pendingEnd?'1':'0.3')+';transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:9px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:2px 8px;border-radius:4px;background:transparent" title="Apply time edit">✓</button></span>';
           h+='<span style="font-size:12px;color:var(--txt);font-weight:bold;min-width:46px;text-align:right">'+fmt$(dg)+'</span>';
           h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';
           h+='</div>';
@@ -2697,7 +2692,7 @@ function renderHistoryTab(rate){
             }
             h+='</div>';
           }
-          // Add Break button / inline form
+          // Add Break inline form
           const isAddBrkOpen=_addBreak&&_addBreak.wk===w.key&&_addBreak.dk===dk;
           h+='<div style="padding-left:100px;margin-top:5px">';
           if(isAddBrkOpen){
@@ -2874,10 +2869,22 @@ function showPayStub(wkStr){
 }
 function setHistMode(m){S.histMode=m;render();}
 function toggleWk(k){S.expandedWk=S.expandedWk===k?null:k;render();}
-// Per-day transient start time store (set by start input, consumed when end input fires)
+// Per-day transient start/end time store — values held here until user taps Apply
+// This prevents re-rendering while the native iOS time picker is open
 const _hdtStart={};
+const _hdtEnd={};
 function editHistDayStart(wk,dk,v){_hdtStart[dk]=v;}
-function editHistDayEnd(wk,dk,endVal){
+function editHistDayEndStore(wk,dk,v){
+  // Store end time WITHOUT re-rendering — avoids closing the iOS time picker
+  _hdtEnd[dk]={wk,v};
+  // Show the Apply button by toggling a class on the row's apply-btn span
+  const btn=document.getElementById('hde-apply-'+dk);
+  if(btn)btn.style.opacity='1';
+}
+function applyHistDayEdit(wk,dk){
+  const pending=_hdtEnd[dk];
+  if(!pending)return;
+  const endVal=pending.v;
   const startVal=_hdtStart[dk];
   if(!startVal||!endVal)return;
   const sm=toMin(startVal),em=toMin(endVal);
@@ -2888,6 +2895,7 @@ function editHistDayEnd(wk,dk,endVal){
   const netSec=Math.max(0,grossSec-breakSec);
   S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
   save('log');
+  delete _hdtEnd[dk];
   delete _hdtStart[dk];
   renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
 }
@@ -2910,7 +2918,6 @@ function delHistDay(wk,dk){
 
 // Historical entry form
 let _hFormOpen=false,_hForm={date:todayStr(),inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};
-let _addBreak=null; // {wk, dk} when add-break inline form is open for a day row
 function toggleHistForm(){_hFormOpen=!_hFormOpen;if(_hFormOpen)_hForm={date:todayStr(),inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};render();}
 function openHistForm(wkStr){_hFormOpen=true;_hForm={date:wkStr,inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};render();window.scrollTo({top:0,behavior:'smooth'});}
 function hff(k,v){_hForm[k]=v;const a=document.getElementById('hist-form-area');if(a){const tmp=document.createElement('div');tmp.innerHTML=renderHistFormHTML();a.replaceWith(tmp.firstChild);}}
