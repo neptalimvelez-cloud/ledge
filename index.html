@@ -2420,6 +2420,24 @@ function delBreakEntry(wk,dk,id){
   save('breakLog');
   renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
 }
+function openAddBreak(wk,dk){_addBreak={wk,dk};renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
+function closeAddBreak(){_addBreak=null;renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
+function confirmAddBreak(wk,dk){
+  const minsEl=document.getElementById('add-brk-min-'+dk);
+  const lblEl=document.getElementById('add-brk-lbl-'+dk);
+  const mins=parseFloat(minsEl?.value)||0;
+  if(mins<=0){showToast('Enter break minutes');return;}
+  const brkSec=mins*60;
+  const label=(lblEl?.value||'').trim()||'Manual break';
+  if(!S.breakLog[wk])S.breakLog[wk]={};
+  if(!S.breakLog[wk][dk])S.breakLog[wk][dk]=[];
+  S.breakLog[wk][dk]=[...S.breakLog[wk][dk],{id:Date.now().toString(),type:'manual',sec:brkSec,label}];
+  const current=(S.log[wk]&&S.log[wk][dk])||0;
+  S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:Math.max(0,current-brkSec)}};
+  save('breakLog');save('log');
+  _addBreak=null;
+  renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
+}
 
 // Auto-log full shift at shift end
 function autoLogCheck(){
@@ -2649,6 +2667,8 @@ function renderHistoryTab(rate){
           const dg=calcEarnings(sec,rate,oa,om);
           const sh=S.schedule.shifts[dd.getDay()];
           const shStart=sh?.start||'';
+          // Pre-init _hdtStart so editing only the end field works without touching start
+          if(shStart) _hdtStart[dk]=shStart;
           let h='';
           h+='<div style="padding:8px 0;border-bottom:1px solid var(--bdr)">';
           h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:4px">';
@@ -2677,6 +2697,20 @@ function renderHistoryTab(rate){
             }
             h+='</div>';
           }
+          // Add Break button / inline form
+          const isAddBrkOpen=_addBreak&&_addBreak.wk===w.key&&_addBreak.dk===dk;
+          h+='<div style="padding-left:100px;margin-top:5px">';
+          if(isAddBrkOpen){
+            h+='<div class="flex" style="align-items:center;gap:5px;flex-wrap:wrap">';
+            h+='<input id="add-brk-min-'+dk+'" type="number" min="1" step="1" placeholder="min" style="width:52px;font-size:11px;padding:3px 5px">';
+            h+='<input id="add-brk-lbl-'+dk+'" type="text" placeholder="label (optional)" style="flex:1;font-size:11px;padding:3px 5px">';
+            h+='<button onclick="confirmAddBreak(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:9px;color:var(--grn);border:1px solid rgba(80,192,80,.3);padding:2px 8px;border-radius:4px">✓</button>';
+            h+='<button onclick="closeAddBreak()" style="font-size:9px;color:var(--mut);border:1px solid var(--bdr);padding:2px 8px;border-radius:4px">✕</button>';
+            h+='</div>';
+          }else{
+            h+='<button onclick="openAddBreak(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:9px;color:var(--mut);border:1px solid var(--bdr);padding:2px 7px;border-radius:4px;background:transparent">⊕ Add Break</button>';
+          }
+          h+='</div>';
           h+='</div>';
           return h;
         }).join('');
@@ -2876,6 +2910,7 @@ function delHistDay(wk,dk){
 
 // Historical entry form
 let _hFormOpen=false,_hForm={date:todayStr(),inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};
+let _addBreak=null; // {wk, dk} when add-break inline form is open for a day row
 function toggleHistForm(){_hFormOpen=!_hFormOpen;if(_hFormOpen)_hForm={date:todayStr(),inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};render();}
 function openHistForm(wkStr){_hFormOpen=true;_hForm={date:wkStr,inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};render();window.scrollTo({top:0,behavior:'smooth'});}
 function hff(k,v){_hForm[k]=v;const a=document.getElementById('hist-form-area');if(a){const tmp=document.createElement('div');tmp.innerHTML=renderHistFormHTML();a.replaceWith(tmp.firstChild);}}
