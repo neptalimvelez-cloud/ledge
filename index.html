@@ -1862,15 +1862,10 @@ function tickTracker(){
     const eP=(shEm/1440*100).toFixed(1);
     const g='rgba(93,232,160,',o='rgba(255,173,107,';
     if(ov){
-      if(nowMin>=shSm){
-        ldr.style.background=p.onBreak
-          ?'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) 100%)'
-          :'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.2) '+sP+'%,'+g+'0.1) '+nP+'%,transparent '+nP+'%)';
-      }else{
-        ldr.style.background=p.onBreak
-          ?'linear-gradient(180deg,'+g+'0.18) 0%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) '+eP+'%,transparent '+eP+'%,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.1) 100%)'
-          :'linear-gradient(180deg,'+g+'0.2) 0%,'+g+'0.1) '+nP+'%,transparent '+nP+'%,transparent '+eP+'%,transparent '+eP+'%,transparent '+sP+'%,'+g+'0.2) '+sP+'%,'+g+'0.1) 100%)';
-      }
+      // Overnight live: this row is the starting day — always show pre-midnight portion only
+      ldr.style.background=p.onBreak
+        ?'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) 100%)'
+        :'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.2) '+sP+'%,'+g+'0.1) '+nP+'%,transparent '+nP+'%)';
     }else{
       ldr.style.background=p.onBreak
         ?'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) '+eP+'%,transparent '+eP+'%)'
@@ -2019,13 +2014,36 @@ function renderTrackerTab(now,rate,ws,wk){
     // Convert shift start/end to % of 24h day
     const sPct=(shSm/1440*100).toFixed(1);
     const ePct=(shEm/1440*100).toFixed(1);
+    // For overnight shifts: the starting day row shows only the pre-midnight portion (sPct→100%).
+    // The following day's row picks up the post-midnight spill (0%→ePct) from the previous dow.
+    const prevDow2=((dow-1)+7)%7,prevSh2=S.schedule.shifts[prevDow2];
+    const prevOvernight2=prevSh2?.active&&toMin(prevSh2.end)<toMin(prevSh2.start);
+    const prevEPct2=prevOvernight2?(toMin(prevSh2.end)/1440*100).toFixed(1):null;
+    const prevDd2=new Date(dd);prevDd2.setDate(prevDd2.getDate()-1);
+    const prevDk2=dayKey(prevDd2);
+    const prevSec2=thisWk[prevDk2]||0;
     let dayBg='';
     if(sec>0&&!isLive){
-      // Completed shift: fill the shift hours
+      // Completed shift: show only this day's calendar-day portion
       if(overnight){
-        dayBg='background:linear-gradient(180deg,transparent 0%,'+grnS+'0.15) 0%,'+grnS+'0.08) '+ePct+'%,transparent '+ePct+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) 100%);';
+        // Starting day: evening portion only (sPct to midnight)
+        dayBg='background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) 100%);';
       }else{
         dayBg='background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) '+ePct+'%,transparent '+ePct+'%);';
+      }
+    }
+    // Spill from previous day's overnight shift into this day (0% to prevEPct2)
+    if(prevOvernight2&&prevSec2>0&&!isLive&&prevEPct2){
+      if(sec>0){
+        // Both spill and own shift: combine
+        if(overnight){
+          dayBg='background:linear-gradient(180deg,'+grnS+'0.15) 0%,'+grnS+'0.08) '+prevEPct2+'%,transparent '+prevEPct2+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) 100%);';
+        }else{
+          dayBg='background:linear-gradient(180deg,'+grnS+'0.15) 0%,'+grnS+'0.08) '+prevEPct2+'%,transparent '+prevEPct2+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) '+ePct+'%,transparent '+ePct+'%);';
+        }
+      }else{
+        // Only spill, no own logged hours
+        dayBg='background:linear-gradient(180deg,'+grnS+'0.15) 0%,'+grnS+'0.08) '+prevEPct2+'%,transparent '+prevEPct2+'%);';
       }
     }
     if(isLive){
@@ -2033,17 +2051,10 @@ function renderTrackerTab(now,rate,ws,wk){
       const nowMin=now.getHours()*60+now.getMinutes();
       const nowPct=(nowMin/1440*100).toFixed(1);
       if(overnight){
-        if(nowMin>=shSm){
-          // Pre-midnight: green from shift start to now, rest of shift unfilled
-          dayBg=onBreakNow
-            ?'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) 100%);'
-            :'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%);';
-        }else{
-          // Post-midnight: pre-midnight portion fully green + post-midnight green to now
-          dayBg=onBreakNow
-            ?'background:linear-gradient(180deg,'+grnS+'0.18) 0%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) '+ePct+'%,transparent '+ePct+'%,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.1) 100%);'
-            :'background:linear-gradient(180deg,'+grnS+'0.2) 0%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%,transparent '+ePct+'%,transparent '+ePct+'%,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) 100%);';
-        }
+        // Live overnight: starting day shows pre-midnight progress only
+        dayBg=onBreakNow
+          ?'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) 100%);'
+          :'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%);';
       }else{
         dayBg=onBreakNow
           ?'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) '+ePct+'%,transparent '+ePct+'%);'
@@ -2440,23 +2451,26 @@ function backfillMissedShifts(){
     if(now<shiftEnd)continue;
     const ws=getWeekStart(checkDate,sch.weekStartDay,sch.weekStartTime);
     const wk=localStr(ws),dk=dayKey(checkDate);
-    // Skip if already logged or covered by custom shift
-    if(S.log[wk]&&S.log[wk][dk])continue;
+    // Skip if covered by custom shift
     if(csCoveredDays(wk).has(dk))continue;
     // Skip if the pause state shows this shift was explicitly paused (Left Early)
     // — pausedAt contains the actual worked seconds
     const ps=lsGet('pause_v3');
     if(ps&&ps.paused&&ps.dayKey===dk&&ps.pausedAt!=null)continue;
-    // Log full shift duration
-    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:dur*60}};
+    const fullSec=dur*60;
+    const existingSec=S.log[wk]&&S.log[wk][dk];
+    // If already logged at full duration, nothing to do
+    if(existingSec&&existingSec>=fullSec)continue;
+    // Log full shift duration (upgrades partial saves from mid-shift app closes)
+    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:fullSec}};
     changed=true;
   }
   if(changed){lsSet('log_v3',S.log);}
 }
 
 // Custom shift form
-let _csFormOpen=false,_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:'',gross:''};
-function openCSForm(){_csFormOpen=true;_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:String(parseFloat(S.schedule.hourlyRate)||''),gross:''};renderCSForm();}
+let _csFormOpen=false,_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:'',gross:'',start:'',end:''};
+function openCSForm(){_csFormOpen=true;_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:String(parseFloat(S.schedule.hourlyRate)||''),gross:'',start:S.schedule.shifts[new Date().getDay()]?.start||'',end:S.schedule.shifts[new Date().getDay()]?.end||''};renderCSForm();}
 function renderCSForm(){
   const a=document.getElementById('cs-form-area');if(!a)return;
   if(!_csFormOpen){a.innerHTML='';return;}
@@ -2468,11 +2482,12 @@ function renderCSForm(){
     <div class="flex gap8 mb10">
       ${[['hourly','Hourly'],['flat','Flat Amount']].map(([v,l])=>`<button style="flex:1;padding:7px;border:1px solid ${_csForm.type===v?'var(--pur)':'var(--bdr)'};background:${_csForm.type===v?'var(--purd)':'transparent'};color:${_csForm.type===v?'var(--pur)':'var(--mut)'};" onclick="csf('type','${v}')">${l}</button>`).join('')}
     </div>
-    ${_csForm.type==='hourly'?`<div class="form-row">
-      <div><div class="label2">Hours</div><input type="number" min="0" step=".25" placeholder="8.0" value="${_csForm.hours}" onblur="csf('hours',this.value)"></div>
-      <div><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${parseFloat(S.schedule.hourlyRate)||''}" value="${_csForm.rate}" onblur="csf('rate',this.value)" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div>
-    </div>`:`<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${_csForm.gross}" onblur="csf('gross',this.value)" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>`}
-    ${((_csForm.type==='hourly'&&_csForm.hours&&_csForm.rate)||(_csForm.type==='flat'&&_csForm.gross))?`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${fmt$(_csForm.type==='hourly'?(parseFloat(_csForm.hours)||0)*(parseFloat(_csForm.rate)||0):parseFloat(_csForm.gross)||0)} gross</div>`:''}
+    ${_csForm.type==='hourly'?`<div class="form-row mb10">
+      <div><div class="label2">Start Time</div><input type="time" value="${_csForm.start}" onchange="csfTime('start',this.value)"></div>
+      <div><div class="label2">End Time</div><input type="time" value="${_csForm.end}" onchange="csfTime('end',this.value)"></div>
+    </div>
+    <div class="mb10"><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${parseFloat(S.schedule.hourlyRate)||''}" value="${_csForm.rate}" onblur="csf('rate',this.value)" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div>`:`<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${_csForm.gross}" onblur="csf('gross',this.value)" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>`}
+    ${(()=>{if(_csForm.type==='flat'&&_csForm.gross)return`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${fmt$(parseFloat(_csForm.gross)||0)} gross</div>`;if(_csForm.type==='hourly'&&_csForm.start&&_csForm.end&&_csForm.rate){const sm=toMin(_csForm.start),em=toMin(_csForm.end),hrs=(em<sm?em+1440-sm:em-sm)/60;return`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${hrs.toFixed(2)}h · ${fmt$(hrs*(parseFloat(_csForm.rate)||0))} gross</div>`;}return'';})()}
     <div class="flex gap8">
       <button class="btn-acc f1" style="background:var(--pur)" onclick="saveCS()">Save Shift</button>
       <button class="btn-ghost" onclick="_csFormOpen=false;renderCSForm()">Cancel</button>
@@ -2480,6 +2495,7 @@ function renderCSForm(){
   </div>`;
 }
 function csf(k,v){_csForm[k]=v;renderCSForm();}
+function csfTime(k,v){_csForm[k]=v;renderCSForm();}
 function purgeLogDay(dateStr){
   // Remove a single day's log entry so a custom shift can't double-count
   const wkStr=localStr(getWeekStart(parseLocal(dateStr),S.schedule.weekStartDay,S.schedule.weekStartTime));
@@ -2492,7 +2508,11 @@ function purgeLogDay(dateStr){
 }
 function saveCS(){
   if(!_csForm.date)return;
-  if(_csForm.type==='hourly'&&(!_csForm.hours||!_csForm.rate))return;
+  if(_csForm.type==='hourly'){
+    if(!_csForm.start||!_csForm.end||!_csForm.rate)return;
+    const sm=toMin(_csForm.start),em=toMin(_csForm.end);
+    _csForm.hours=String(((em<sm?em+1440-sm:em-sm)/60).toFixed(4));
+  }
   if(_csForm.type==='flat'&&!_csForm.gross)return;
   purgeLogDay(_csForm.date);
   S.customShifts=[...S.customShifts,{..._csForm,id:Date.now().toString()}];
