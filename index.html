@@ -1080,6 +1080,7 @@ let S={
   wizardSeen:false,
   achievements:{},
   pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]},
+  breakLog:{},
 };
 
 function loadState(){
@@ -1091,6 +1092,7 @@ function loadState(){
         r401=lsGet('ret401k_v1'),si=lsGet('side_income_v1'),sc=lsGet('savings_challenge_v1'),
         txns=lsGet('transactions_v1');
   const ist=lsGet('income_thresholds_v1'),acr=lsGet('auto_cat_rules_v1');
+  const bkl=lsGet('break_log_v1');
   if(sch)S.schedule={...DEFAULT_SCH,...sch,shifts:{...DEFAULT_SCH.shifts,...sch.shifts}};
   if(ded)S.deductions=ded;
   if(log)S.log=log;
@@ -1111,6 +1113,7 @@ function loadState(){
   if(txns)S.transactions=txns;
   if(ist)S.incomeSafetyThresholds={...S.incomeSafetyThresholds,...ist};
   if(acr)S.autoCatRules=acr;
+  if(bkl)S.breakLog=bkl;
   const edd=lsGet('early_deposit_v1');if(edd!=null)S.earlyDepositDays=edd;
   const thm=lsGet('theme_v1');if(thm)S.theme=thm;
   const wiz=lsGet('wizard_seen_v1');if(wiz)S.wizardSeen=wiz;
@@ -1153,7 +1156,8 @@ function save(key){
     theme:'theme_v1',
     wizardSeen:'wizard_seen_v1',
     achievements:'achievements_v1',
-    accentColor:'accent_color_v1'
+    accentColor:'accent_color_v1',
+    breakLog:'break_log_v1'
   };
   lsSet(map[key],S[key]);
   showToast(false);
@@ -1880,6 +1884,7 @@ function tickTracker(){
   if(!p.paused&&shift&&netSec>0&&Math.floor(netSec)%60===0&&netSec>0){
     const todayDkNow=dayKey(shift.date);
     S.log={...S.log,[wk]:{...(S.log[wk]||{}),[todayDkNow]:netSec}};
+    commitBreakLog(wk,todayDkNow);
     lsSet('log_v3',S.log);
     showToast(false);
   }
@@ -2318,6 +2323,17 @@ function saveQuickTx(){
   showToast(true);
 }
 
+// Commit live break log from S.pause into persistent S.breakLog for a given shift day
+function commitBreakLog(wk,dk){
+  const bl=S.pause.breakLog||[];
+  if(!bl.length)return;
+  const existing=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
+  const ids=new Set(existing.map(b=>b.id));
+  const merged=[...existing,...bl.filter(b=>!ids.has(b.id))];
+  S.breakLog={...S.breakLog,[wk]:{...(S.breakLog[wk]||{}),[dk]:merged}};
+  save('breakLog');
+}
+
 function handlePause(){
   const now=new Date(),shift=getActiveShift(now),p=S.pause;
   if(!shift)return;
@@ -2328,8 +2344,10 @@ function handlePause(){
   const wk=localStr(ws);
   if(!p.paused){
     // LEFT EARLY: save netSec as final for this shift day, freeze it
-    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dayKey(shift.date)]:netSec}};
-    S.pause={...p,paused:true,pausedAt:netSec,dayKey:dayKey(now)};
+    const dk=dayKey(shift.date);
+    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
+    commitBreakLog(wk,dk);
+    S.pause={...p,paused:true,pausedAt:netSec,dayKey:dk};
     save('log');save('pause');
   }else{
     // Resume: clear pause but keep the saved log value — don't let live time grow beyond saved
@@ -2347,7 +2365,9 @@ function handleManualSave(){
   const netSec=Math.max(0,liveSec-(p.accBreakSec+brkLive));
   const ws=getWeekStart(shift.date,S.schedule.weekStartDay,S.schedule.weekStartTime);
   const wk=localStr(ws);
-  S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dayKey(shift.date)]:netSec}};
+  const dk=dayKey(shift.date);
+  S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
+  commitBreakLog(wk,dk);
   save('log');showToast(true);
 }
 
@@ -2386,6 +2406,21 @@ function removeBreak(id){
   save('pause');render();
 }
 
+// Delete a committed break entry from history and add its seconds back to net log
+function delBreakEntry(wk,dk,id){
+  const dayBreaks=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
+  const removed=dayBreaks.find(b=>b.id===id);
+  if(!removed)return;
+  const updated=dayBreaks.filter(b=>b.id!==id);
+  S.breakLog={...S.breakLog,[wk]:{...(S.breakLog[wk]||{}),[dk]:updated}};
+  if(S.log[wk]&&S.log[wk][dk]!=null){
+    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:(S.log[wk][dk]||0)+removed.sec}};
+    save('log');
+  }
+  save('breakLog');
+  renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
+}
+
 // Auto-log full shift at shift end
 function autoLogCheck(){
   const now=new Date(),rate=parseFloat(S.schedule.hourlyRate)||0;
@@ -2404,6 +2439,7 @@ function autoLogCheck(){
           if(!(S.log[wk]&&S.log[wk][dk])){
             const dur=em+1440-sm;
             S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:dur*60}};
+            commitBreakLog(wk,dk);
             lsSet('log_v3',S.log);showToast(false);
           }
         }
@@ -2417,6 +2453,7 @@ function autoLogCheck(){
           if(!(S.log[wk]&&S.log[wk][dk])){
             const dur=em-sm;
             S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:dur*60}};
+            commitBreakLog(wk,dk);
             lsSet('log_v3',S.log);showToast(false);
           }
         }
@@ -2469,8 +2506,8 @@ function backfillMissedShifts(){
 }
 
 // Custom shift form
-let _csFormOpen=false,_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:'',gross:'',start:'',end:''};
-function openCSForm(){_csFormOpen=true;_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:String(parseFloat(S.schedule.hourlyRate)||''),gross:'',start:S.schedule.shifts[new Date().getDay()]?.start||'',end:S.schedule.shifts[new Date().getDay()]?.end||''};renderCSForm();}
+let _csFormOpen=false,_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:'',gross:'',start:'',end:'',breakMins:''};
+function openCSForm(){_csFormOpen=true;_csForm={label:'',date:todayStr(),type:'hourly',hours:'',rate:String(parseFloat(S.schedule.hourlyRate)||''),gross:'',start:S.schedule.shifts[new Date().getDay()]?.start||'',end:S.schedule.shifts[new Date().getDay()]?.end||'',breakMins:''};renderCSForm();}
 function renderCSForm(){
   const a=document.getElementById('cs-form-area');if(!a)return;
   if(!_csFormOpen){a.innerHTML='';return;}
@@ -2486,8 +2523,11 @@ function renderCSForm(){
       <div><div class="label2">Start Time</div><input type="time" value="${_csForm.start}" onchange="csfTime('start',this.value)"></div>
       <div><div class="label2">End Time</div><input type="time" value="${_csForm.end}" onchange="csfTime('end',this.value)"></div>
     </div>
-    <div class="mb10"><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${parseFloat(S.schedule.hourlyRate)||''}" value="${_csForm.rate}" onblur="csf('rate',this.value)" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div>`:`<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${_csForm.gross}" onblur="csf('gross',this.value)" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>`}
-    ${(()=>{if(_csForm.type==='flat'&&_csForm.gross)return`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${fmt$(parseFloat(_csForm.gross)||0)} gross</div>`;if(_csForm.type==='hourly'&&_csForm.start&&_csForm.end&&_csForm.rate){const sm=toMin(_csForm.start),em=toMin(_csForm.end),hrs=(em<sm?em+1440-sm:em-sm)/60;return`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${hrs.toFixed(2)}h · ${fmt$(hrs*(parseFloat(_csForm.rate)||0))} gross</div>`;}return'';})()}
+    <div class="form-row mb10">
+      <div><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${parseFloat(S.schedule.hourlyRate)||''}" value="${_csForm.rate}" onblur="csf('rate',this.value)" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div>
+      <div><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${_csForm.breakMins}" onblur="csf('breakMins',this.value)"></div>
+    </div>`:`<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${_csForm.gross}" onblur="csf('gross',this.value)" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>`}
+    ${(()=>{if(_csForm.type==='flat'&&_csForm.gross)return`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${fmt$(parseFloat(_csForm.gross)||0)} gross</div>`;if(_csForm.type==='hourly'&&_csForm.start&&_csForm.end&&_csForm.rate){const sm=toMin(_csForm.start),em=toMin(_csForm.end),totalHrs=(em<sm?em+1440-sm:em-sm)/60,brkHrs=(parseFloat(_csForm.breakMins)||0)/60,netHrs=Math.max(0,totalHrs-brkHrs);return`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${totalHrs.toFixed(2)}h${brkHrs>0?' &minus; '+_csForm.breakMins+'m breaks = '+netHrs.toFixed(2)+'h net':''} · ${fmt$(netHrs*(parseFloat(_csForm.rate)||0))} gross</div>`;}return'';})()}
     <div class="flex gap8">
       <button class="btn-acc f1" style="background:var(--pur)" onclick="saveCS()">Save Shift</button>
       <button class="btn-ghost" onclick="_csFormOpen=false;renderCSForm()">Cancel</button>
@@ -2511,7 +2551,9 @@ function saveCS(){
   if(_csForm.type==='hourly'){
     if(!_csForm.start||!_csForm.end||!_csForm.rate)return;
     const sm=toMin(_csForm.start),em=toMin(_csForm.end);
-    _csForm.hours=String(((em<sm?em+1440-sm:em-sm)/60).toFixed(4));
+    const grossHrs=(em<sm?em+1440-sm:em-sm)/60;
+    const brkHrs=(parseFloat(_csForm.breakMins)||0)/60;
+    _csForm.hours=String(Math.max(0,grossHrs-brkHrs).toFixed(4));
   }
   if(_csForm.type==='flat'&&!_csForm.gross)return;
   purgeLogDay(_csForm.date);
@@ -2600,15 +2642,43 @@ function renderHistoryTab(rate){
       if(isExp){
         const dayEntries=Object.entries(S.log[w.key]||{}).sort((a,b)=>a[0].localeCompare(b[0]));
         dayRows=dayEntries.map(([dk,sec])=>{
-          const dd=parseLocal(dk),dg=calcEarnings(sec,rate,oa,om);
-          return`<div class="flex" style="align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bdr)">
-            <span style="font-size:11px;color:var(--mut);width:28px">${DAYS[dd.getDay()]}</span>
-            <span style="font-size:10px;color:var(--mut);width:72px">${dk}</span>
-            <input type="number" min="0" step=".25" value="${(sec/3600).toFixed(2)}" onblur="editHistDay('${w.key}','${dk}',this.value)" style="width:60px;padding:4px 6px;font-size:12px;text-align:right">
-            <span style="font-size:9px;color:var(--mut)">hrs</span>
-            <span style="font-size:12px;flex:1;text-align:right">${fmt$(dg)}</span>
-            <button class="btn-sm btn-red" onclick="delHistDay('${w.key}','${dk}')">✕</button>
-          </div>`;
+          const dd=parseLocal(dk);
+          const breaks=(S.breakLog[w.key]&&S.breakLog[w.key][dk])||[];
+          const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
+          const grossSec=sec+breakSec;
+          const dg=calcEarnings(sec,rate,oa,om);
+          const sh=S.schedule.shifts[dd.getDay()];
+          const shStart=sh?.start||'';
+          let h='';
+          h+='<div style="padding:8px 0;border-bottom:1px solid var(--bdr)">';
+          h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:4px">';
+          h+='<span style="font-size:11px;color:var(--mut);width:28px">'+DAYS[dd.getDay()]+'</span>';
+          h+='<span style="font-size:10px;color:var(--mut);width:66px">'+dk+'</span>';
+          h+='<input type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift start">';
+          h+='<span style="font-size:9px;color:var(--mut)">→</span>';
+          h+='<input type="time" value="" onchange="editHistDayEnd(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift end — set to update hours">';
+          h+='<span style="font-size:12px;color:var(--txt);font-weight:bold;min-width:46px;text-align:right">'+fmt$(dg)+'</span>';
+          h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';
+          h+='</div>';
+          h+='<div style="font-size:9px;color:var(--mut);padding-left:100px">';
+          h+=(grossSec/3600).toFixed(2)+'h gross';
+          if(breakSec>0)h+=' &minus; <span style="color:var(--org)">'+fmtTime(breakSec)+' breaks</span> = <span style="color:var(--grn)">'+(sec/3600).toFixed(2)+'h net</span>';
+          else h+=' = <span style="color:var(--grn)">'+(sec/3600).toFixed(2)+'h net</span>';
+          h+='</div>';
+          if(breaks.length){
+            h+='<div style="padding-left:100px;margin-top:4px">';
+            for(const b of breaks){
+              const mins=Math.round(b.sec/60);
+              const lbl=b.label||(b.type==='quick'?mins+'m break':'Break');
+              h+='<div class="flex" style="align-items:center;gap:6px;padding:1px 0">';
+              h+='<span style="font-size:9px;color:var(--org)">⏱ '+lbl+' ('+mins+'m)</span>';
+              h+='<button onclick="delBreakEntry(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,&quot;'+b.id+'&quot;)" style="font-size:8px;color:var(--red);border:1px solid rgba(192,80,80,.3);padding:1px 6px;border-radius:4px">✕</button>';
+              h+='</div>';
+            }
+            h+='</div>';
+          }
+          h+='</div>';
+          return h;
         }).join('');
       }
       return`<div class="wk-row" style="border-left:2px solid ${cur?'var(--acc)':'var(--bdr)'}">
@@ -2629,7 +2699,7 @@ function renderHistoryTab(rate){
           </div>
         </div>
         ${isExp?`<div class="wk-body">
-          <div class="label2 mb8">Day Breakdown — tap hours to edit</div>
+          <div class="label2 mb8">Day Breakdown — set end time to edit hours</div>
           ${dayRows||'<div style="font-size:10px;color:var(--mut2)">No logged shifts</div>'}
           <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr)">
             <div class="label2 mb6">Actual Paycheck (net)</div>
@@ -2770,43 +2840,66 @@ function showPayStub(wkStr){
 }
 function setHistMode(m){S.histMode=m;render();}
 function toggleWk(k){S.expandedWk=S.expandedWk===k?null:k;render();}
+// Per-day transient start time store (set by start input, consumed when end input fires)
+const _hdtStart={};
+function editHistDayStart(wk,dk,v){_hdtStart[dk]=v;}
+function editHistDayEnd(wk,dk,endVal){
+  const startVal=_hdtStart[dk];
+  if(!startVal||!endVal)return;
+  const sm=toMin(startVal),em=toMin(endVal);
+  const grossSec=(em<sm?em+1440-sm:em-sm)*60;
+  if(grossSec<=0)return;
+  const breaks=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
+  const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
+  const netSec=Math.max(0,grossSec-breakSec);
+  S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
+  save('log');
+  delete _hdtStart[dk];
+  renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
+}
 function editHistDay(wk,dk,v){
   const s=(parseFloat(v)||0)*3600;
   if(s<=0){delHistDay(wk,dk);return;}
   S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:s}};save('log');
-  const el=document.getElementById('content');if(el)renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
+  renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
 }
 function delHistDay(wk,dk){
   const m={...S.log[wk]};delete m[dk];
   if(Object.keys(m).length)S.log={...S.log,[wk]:m};else{const l={...S.log};delete l[wk];S.log=l;}
+  if(S.breakLog[wk]&&S.breakLog[wk][dk]){
+    const wkBl={...S.breakLog[wk]};delete wkBl[dk];
+    S.breakLog={...S.breakLog,[wk]:wkBl};
+    save('breakLog');
+  }
   save('log');render();
 }
 
 // Historical entry form
-let _hFormOpen=false,_hForm={date:todayStr(),inputType:'gross',hours:'',weekHours:'',start:'',end:'',rate:'',note:'',gross:'',takehome:''};
-function toggleHistForm(){_hFormOpen=!_hFormOpen;if(_hFormOpen)_hForm={date:todayStr(),inputType:'gross',hours:'',weekHours:'',start:'',end:'',rate:'',note:'',gross:'',takehome:''};render();}
-function openHistForm(wkStr){_hFormOpen=true;_hForm={date:wkStr,inputType:'gross',hours:'',weekHours:'',start:'',end:'',rate:'',note:'',gross:'',takehome:''};render();window.scrollTo({top:0,behavior:'smooth'});}
+let _hFormOpen=false,_hForm={date:todayStr(),inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};
+function toggleHistForm(){_hFormOpen=!_hFormOpen;if(_hFormOpen)_hForm={date:todayStr(),inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};render();}
+function openHistForm(wkStr){_hFormOpen=true;_hForm={date:wkStr,inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};render();window.scrollTo({top:0,behavior:'smooth'});}
 function hff(k,v){_hForm[k]=v;const a=document.getElementById('hist-form-area');if(a){const tmp=document.createElement('div');tmp.innerHTML=renderHistFormHTML();a.replaceWith(tmp.firstChild);}}
 function renderHistFormHTML(){
   const f=_hForm,rate=parseFloat(S.schedule.hourlyRate)||0;
   let preview='';
   const r=parseFloat(f.rate)||rate;
+  const brkSec=(parseFloat(f.breakMins)||0)*60;
   let secs=0;
   if(f.inputType==='hours')secs=(parseFloat(f.hours)||0)*3600;
   else if(f.inputType==='times'&&f.start&&f.end){const sm=toMin(f.start),em=toMin(f.end);secs=em<sm?(em+1440-sm)*60:(em-sm)*60;}
   else if(f.inputType==='weekly')secs=(parseFloat(f.weekHours)||0)*3600;
-
-  // Gross mode preview: auto-calc implied hours
   let grossPreview='';
   if(f.inputType==='gross'&&f.gross){
-    const g=parseFloat(f.gross)||0;
-    const th=parseFloat(f.takehome)||0;
+    const g=parseFloat(f.gross)||0,th=parseFloat(f.takehome)||0;
     const activeDayCount=Object.values(S.schedule.shifts).filter(s=>s.active).length||1;
     const impliedHrsPerDay=r>0?(g/r/activeDayCount):0;
     grossPreview=`<div style="font-size:11px;color:var(--acc);margin-bottom:10px;letter-spacing:1px">→ ${fmt$(g)} gross${th>0?` · ${fmt$(th)} take-home`:''}${impliedHrsPerDay>0?` · ~${impliedHrsPerDay.toFixed(1)}h/day avg`:''}</div>`;
   }
-  if(secs&&r)preview=`<div style="font-size:11px;color:var(--acc);margin-bottom:10px;letter-spacing:1px">→ ${f.inputType==='weekly'?`${(secs/3600).toFixed(1)}h week`:`${(secs/3600).toFixed(2)}h`} · ${fmt$(calcEarnings(secs,r,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier))} gross at $${r.toFixed(2)}/hr</div>`;
-
+  if(secs&&r){
+    const netSecs=Math.max(0,secs-brkSec);
+    const brkNote=brkSec>0?` &minus; ${fmtTime(brkSec)} breaks = ${(netSecs/3600).toFixed(2)}h net`:'';
+    preview=`<div style="font-size:11px;color:var(--acc);margin-bottom:10px;letter-spacing:1px">→ ${f.inputType==='weekly'?`${(secs/3600).toFixed(1)}h week`:`${(secs/3600).toFixed(2)}h`}${brkNote} · ${fmt$(calcEarnings(netSecs,r,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier))} gross at $${r.toFixed(2)}/hr</div>`;
+  }
   return`<div class="inline-form mb14" id="hist-form-area">
     <div class="label">New Historical Entry</div>
     <div class="form-row">
@@ -2814,17 +2907,18 @@ function renderHistFormHTML(){
       <div><div class="label2">Note (optional)</div><input placeholder="e.g. Holiday" value="${f.note}" onblur="hff('note',this.value)"></div>
     </div>
     <div class="flex gap6 mb12" style="flex-wrap:wrap">
-      ${[['gross','Gross + Pay'],['hours','Daily Hours'],['times','Start→End'],['weekly','Week Total']].map(([v,l])=>`<button style="flex:1;min-width:80px;padding:7px;border:1px solid ${f.inputType===v?'var(--acc)':'var(--bdr)'};background:${f.inputType===v?'var(--accd)':'transparent'};color:${f.inputType===v?'var(--acc)':'var(--mut)'};font-size:8px" onclick="hff('inputType','${v}')">${l}</button>`).join('')}
+      ${[['times','Start→End'],['hours','Daily Hours'],['gross','Gross + Pay'],['weekly','Week Total']].map(([v,l])=>`<button style="flex:1;min-width:80px;padding:7px;border:1px solid ${f.inputType===v?'var(--acc)':'var(--bdr)'};background:${f.inputType===v?'var(--accd)':'transparent'};color:${f.inputType===v?'var(--acc)':'var(--mut)'};font-size:8px" onclick="hff('inputType','${v}')">${l}</button>`).join('')}
     </div>
-    ${f.inputType==='gross'?`<div class="mb12">
-      <div class="form-row">
-        <div><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${f.gross}" onblur="hff('gross',this.value)" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
-        <div><div class="label2">Take-Home (optional)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${f.takehome}" onblur="hff('takehome',this.value)" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
-      </div>
-      ${grossPreview}
+    ${f.inputType==='gross'?`<div class="mb12"><div class="form-row">
+      <div><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${f.gross}" onblur="hff('gross',this.value)" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
+      <div><div class="label2">Take-Home (optional)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${f.takehome}" onblur="hff('takehome',this.value)" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
+    </div>${grossPreview}</div>`:''}
+    ${f.inputType==='hours'?`<div class="form-row mb12">
+      <div><div class="label2">Hours Worked</div><input type="number" min="0" step=".25" placeholder="10.5" value="${f.hours}" onblur="hff('hours',this.value)"></div>
+      <div><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${f.breakMins}" onblur="hff('breakMins',this.value)"></div>
     </div>`:''}
-    ${f.inputType==='hours'?`<div class="mb12"><div class="label2">Hours Worked</div><input type="number" min="0" step=".25" placeholder="8.0" value="${f.hours}" onblur="hff('hours',this.value)"></div>`:''}
-    ${f.inputType==='times'?`<div class="flex gap8 mb12 items-center"><div class="f1"><div class="label2">Start</div><input type="time" value="${f.start}" onchange="hff('start',this.value)"></div><span class="mut" style="margin-top:14px">→</span><div class="f1"><div class="label2">End</div><input type="time" value="${f.end}" onchange="hff('end',this.value)"></div></div>`:''}
+    ${f.inputType==='times'?`<div class="flex gap8 mb10 items-center"><div class="f1"><div class="label2">Start</div><input type="time" value="${f.start}" onchange="hff('start',this.value)"></div><span class="mut" style="margin-top:14px">→</span><div class="f1"><div class="label2">End</div><input type="time" value="${f.end}" onchange="hff('end',this.value)"></div></div>
+    <div class="mb12"><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${f.breakMins}" onblur="hff('breakMins',this.value)" style="width:120px"></div>`:''}
     ${f.inputType==='weekly'?`<div class="mb12"><div class="label2">Total Hours for the Week</div><input type="number" min="0" step=".25" placeholder="40.0" value="${f.weekHours}" onblur="hff('weekHours',this.value)"><div style="font-size:9px;color:var(--mut);margin-top:6px;line-height:1.6">Split proportionally across ${Object.values(S.schedule.shifts).filter(s=>s.active).length} active days by shift length.</div></div>`:''}
     ${f.inputType!=='gross'?`<div class="mb14"><div class="label2">Rate Override (blank = $${rate.toFixed(2)}/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${rate.toFixed(2)}" value="${f.rate}" onblur="hff('rate',this.value)" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 10px;color:var(--mut);font-size:11px">/hr</span></div></div>`:''}
     ${preview}
@@ -2834,50 +2928,49 @@ function renderHistFormHTML(){
 function saveHistEntry(){
   const f=_hForm,rate=parseFloat(S.schedule.hourlyRate)||0,er=parseFloat(f.rate)||rate;
   if(!f.date)return;
+  const brkSec=(parseFloat(f.breakMins)||0)*60;
 
-  // GROSS + TAKEHOME mode — store as flat custom shift, optionally record paycheck takehome
   if(f.inputType==='gross'){
     const g=parseFloat(f.gross)||0;if(g<=0)return;
     const th=parseFloat(f.takehome)||0;
-    // Calculate implied hours/day from gross and rate for display
     const activeDays=Object.values(S.schedule.shifts).filter(s=>s.active).length||1;
-    const impliedHrs=er>0?(g/er):0;
-    const impliedHrsPerDay=impliedHrs/activeDays;
-    // Store as a flat custom shift for the week
+    const impliedHrsPerDay=er>0?(g/er/activeDays):0;
     const ref=parseLocal(f.date);
     const wkStr=localStr(getWeekStart(ref,S.schedule.weekStartDay,S.schedule.weekStartTime));
     purgeLogDay(f.date);
     S.customShifts=[...S.customShifts,{id:Date.now().toString(),label:f.note||(impliedHrsPerDay>0?`~${impliedHrsPerDay.toFixed(1)}h/day avg`:'Weekly pay'),date:f.date,type:'flat',gross:String(g)}];
-    // If take-home provided, record as paycheck
-    if(th>0){
-      if(!S.paychecks[wkStr])S.paychecks[wkStr]={};
-      S.paychecks[wkStr].amount=th;
-      S.paychecks[wkStr].date=f.date;
-      save('paychecks');
-    }
+    if(th>0){if(!S.paychecks[wkStr])S.paychecks[wkStr]={};S.paychecks[wkStr].amount=th;S.paychecks[wkStr].date=f.date;save('paychecks');}
     save('customShifts');_hFormOpen=false;render();return;
   }
 
   if(f.inputType==='weekly'){
     const totalHrs=parseFloat(f.weekHours)||0;if(totalHrs<=0)return;
-    const ref=parseLocal(f.date),ewk=localStr(getWeekStart(ref,S.schedule.weekStartDay,S.schedule.weekStartTime));
-    const ws2=getWeekStart(ref,S.schedule.weekStartDay,S.schedule.weekStartTime);
-    const activeDays=[];
-    for(let i=0;i<7;i++){const dow=(parseInt(S.schedule.weekStartDay||0)+i)%7,sh=S.schedule.shifts[dow];if(!sh?.active)continue;const sm=toMin(sh.start),em=toMin(sh.end),dur=em<sm?em+1440-sm:em-sm;const dd=new Date(ws2);dd.setDate(ws2.getDate()+i);activeDays.push({dk:dayKey(dd),min:dur});}
+    const ref=parseLocal(f.date);
     const usedRate=er>0?er:rate;
     S.customShifts=[...S.customShifts,{id:Date.now().toString(),label:f.note||'Weekly historical',date:f.date,type:'hourly',hours:String(totalHrs),rate:String(usedRate)}];
     save('customShifts');_hFormOpen=false;render();return;
   }
-  let secs=0;
-  if(f.inputType==='hours')secs=(parseFloat(f.hours)||0)*3600;
-  else{const sm=toMin(f.start),em=toMin(f.end);secs=em<sm?(em+1440-sm)*60:(em-sm)*60;}
-  if(secs<=0)return;
+
+  let grossSecs=0;
+  if(f.inputType==='hours')grossSecs=(parseFloat(f.hours)||0)*3600;
+  else{const sm=toMin(f.start),em=toMin(f.end);grossSecs=em<sm?(em+1440-sm)*60:(em-sm)*60;}
+  if(grossSecs<=0)return;
+  const netSecs=Math.max(0,grossSecs-brkSec);
   const d=parseLocal(f.date),ewk=localStr(getWeekStart(d,S.schedule.weekStartDay,S.schedule.weekStartTime)),dk=dayKey(d);
+
   if(er!==rate&&er>0){
-    S.customShifts=[...S.customShifts,{id:Date.now().toString(),label:f.note||'Historical entry',date:f.date,type:'hourly',hours:String(secs/3600),rate:String(er)}];
+    // Rate override — store as custom shift (no break log for custom shifts)
+    S.customShifts=[...S.customShifts,{id:Date.now().toString(),label:f.note||'Historical entry',date:f.date,type:'hourly',hours:String(netSecs/3600),rate:String(er)}];
     save('customShifts');_hFormOpen=false;render();return;
   }
-  S.log={...S.log,[ewk]:{...(S.log[ewk]||{}),[dk]:secs}};
+
+  S.log={...S.log,[ewk]:{...(S.log[ewk]||{}),[dk]:netSecs}};
+  // Store break as a log entry if break minutes were entered
+  if(brkSec>0){
+    const bl=(S.breakLog[ewk]&&S.breakLog[ewk][dk])||[];
+    S.breakLog={...S.breakLog,[ewk]:{...(S.breakLog[ewk]||{}),[dk]:[...bl,{id:Date.now().toString(),type:'manual',sec:brkSec,label:'Break (entered)'}]}};
+    save('breakLog');
+  }
   save('log');_hFormOpen=false;render();
 }
 
@@ -5916,7 +6009,8 @@ function clearAllDataConfirmed(){
     'budget_expenses_v1','budget_goals_v1','budget_debts_v1','envelopes_v1','assets_v1',
     'tax_rate_v1','pin_v1','snapshots_v1','milestones_v1','ret401k_v1','side_income_v1',
     'savings_challenge_v1','transactions_v1','early_deposit_v1','income_thresholds_v1',
-    'auto_cat_rules_v1','wizard_seen_v1','achievements_v1','theme_v1','accent_color_v1','__activeApp__'];
+    'auto_cat_rules_v1','wizard_seen_v1','achievements_v1','theme_v1','accent_color_v1',
+    'break_log_v1','__activeApp__'];
   keys.forEach(k=>localStorage.removeItem(k));
   // Reset state to defaults
   S={
@@ -5932,6 +6026,7 @@ function clearAllDataConfirmed(){
     incomeSafetyThresholds:{monthlyFloor:'',notifyOnShortfall:true},autoCatRules:[],
     theme:'midnight',accentColor:'',wizardSeen:false,achievements:{},
     pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]},
+    breakLog:{},
   };
   applyTheme();
   closeDataPanel();
@@ -5946,6 +6041,7 @@ function exportJSON(){
     transactions:S.transactions,taxRate:S.taxRate,earlyDepositDays:S.earlyDepositDays,
     incomeSafetyThresholds:S.incomeSafetyThresholds,autoCatRules:S.autoCatRules,
     theme:S.theme,accentColor:S.accentColor,achievements:S.achievements,
+    breakLog:S.breakLog,
     exportedAt:new Date().toISOString()};
   const json=JSON.stringify(bundle,null,2);
   if(navigator.clipboard)navigator.clipboard.writeText(json).catch(()=>{});
@@ -6007,6 +6103,7 @@ function importJSON(){
     if(bundle.theme){S.theme=bundle.theme;lsSet('theme_v1',S.theme);}
     if(bundle.achievements){S.achievements=bundle.achievements;lsSet('achievements_v1',S.achievements);}
     if(bundle.accentColor!=null){S.accentColor=bundle.accentColor;lsSet('accent_color_v1',S.accentColor);}
+    if(bundle.breakLog){S.breakLog=bundle.breakLog;lsSet('break_log_v1',S.breakLog);}
     applyTheme();
     showToast(true);closeDataPanel();render();
   }catch(e){const ti=document.getElementById('save-toast'),mi=document.getElementById('toast-msg');if(ti&&mi){ti.classList.remove('manual');ti.classList.add('manual');mi.textContent='Import failed — invalid JSON';ti.classList.add('show');setTimeout(()=>ti.classList.remove('show'),4000);}}
