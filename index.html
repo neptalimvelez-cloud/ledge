@@ -1079,7 +1079,7 @@ let S={
   accentColor:'',
   wizardSeen:false,
   achievements:{},
-  pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null},
+  pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]},
 };
 
 function loadState(){
@@ -1120,7 +1120,7 @@ function loadState(){
     const today=dayKey(new Date());
     const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
     const yestKey=dayKey(yesterday);
-    if(ps.dayKey===today||ps.dayKey===yestKey)S.pause=ps;
+    if(ps.dayKey===today||ps.dayKey===yestKey)S.pause={...ps,breakLog:ps.breakLog||[]};
   }
   // On load: remove log entries only for the specific dates covered by custom shifts
   let logChanged=false;
@@ -1968,6 +1968,7 @@ function renderTrackerTab(now,rate,ws,wk){
         <span style="font-size:8px;color:var(--mut);letter-spacing:2px;align-self:center">QUICK BREAK:</span>
         ${S.schedule.breakRules.map((br,i)=>`<button onclick="quickBreak(${br.minutes})" style="border:1px solid rgba(192,128,80,.3);color:#c08050;font-size:8px;padding:4px 10px">${br.label} (${br.minutes}m)</button>`).join('')}
       </div>`:''}
+      ${(()=>{const bl=S.pause.breakLog||[];if(!bl.length)return '';let bh='<div style="margin-top:10px;border-top:1px solid var(--bdr);padding-top:8px"><div style="font-size:8px;color:var(--mut);letter-spacing:2px;margin-bottom:6px">BREAKS LOGGED</div>';for(const b of bl){const mins=Math.round(b.sec/60);const lbl=b.label||(b.type==='manual'?'Manual':'Break');bh+='<div class="flex" style="justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)"><span style="font-size:10px;color:var(--txt)">'+lbl+' &mdash; '+mins+'m</span><button onclick="removeBreak(\''+b.id+'\')" style="font-size:8px;color:var(--red);border:1px solid rgba(192,80,80,.3);padding:2px 8px;border-radius:6px">&times;</button></div>';}bh+='</div>';return bh;})()}
     `;
   }
 
@@ -2284,22 +2285,39 @@ function handleManualSave(){
   save('log');showToast(true);
 }
 
+let _breakLock=0;
 function handleBreak(){
-  const now=new Date(),p=S.pause;
-  const dk=p.dayKey||dayKey(now);
+  const now=Date.now();if(now-_breakLock<500)return;_breakLock=now;
+  const nd=new Date(),p=S.pause;
+  const dk=p.dayKey||dayKey(nd);
   if(!p.onBreak){
-    S.pause={...p,onBreak:true,breakStart:now.getTime(),dayKey:dk};
+    S.pause={...p,onBreak:true,breakStart:now,dayKey:dk};
   }else{
     const elapsed=p.breakStart?Math.floor((now-p.breakStart)/1000):0;
-    S.pause={...p,onBreak:false,breakStart:null,accBreakSec:(p.accBreakSec||0)+elapsed,dayKey:dk};
+    const log=[...(p.breakLog||[]),{id:Date.now().toString(),type:'manual',sec:elapsed,time:now}];
+    S.pause={...p,onBreak:false,breakStart:null,accBreakSec:(p.accBreakSec||0)+elapsed,dayKey:dk,breakLog:log};
   }
   save('pause');
 }
 
 function quickBreak(mins){
+  const now=Date.now();if(now-_breakLock<500)return;_breakLock=now;
   const dk=S.pause.dayKey||dayKey(new Date());
-  S.pause={...S.pause,accBreakSec:(S.pause.accBreakSec||0)+mins*60,dayKey:dk};
+  const sec=mins*60;
+  const log=[...(S.pause.breakLog||[]),{id:Date.now().toString(),type:'quick',sec:sec,label:mins+'m',time:now}];
+  S.pause={...S.pause,accBreakSec:(S.pause.accBreakSec||0)+sec,dayKey:dk,breakLog:log};
   save('pause');
+}
+
+function removeBreak(id){
+  const p=S.pause;
+  const log=[...(p.breakLog||[])];
+  const idx=log.findIndex(b=>b.id===id);
+  if(idx<0)return;
+  const entry=log[idx];
+  log.splice(idx,1);
+  S.pause={...p,accBreakSec:Math.max(0,(p.accBreakSec||0)-entry.sec),breakLog:log};
+  save('pause');render();
 }
 
 // Auto-log full shift at shift end
@@ -3260,7 +3278,7 @@ function saveSetup(){
   _editSch.annualGoal=annual;
   _editSch.overtimeAfter=ota;_editSch.overtimeMultiplier=otm;
   S.taxRate=tax;S.schedule={..._editSch};
-  S.pause={paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null};
+  S.pause={paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]};
   save('schedule');save('pause');save('taxRate');showToast(true);S.trackerTab='tracker';render();
 }
 
@@ -5838,7 +5856,7 @@ function clearAllDataConfirmed(){
     calLegendHidden:false,expenses:[],goals:[],debts:[],transactions:[],
     incomeSafetyThresholds:{monthlyFloor:'',notifyOnShortfall:true},autoCatRules:[],
     theme:'midnight',accentColor:'',wizardSeen:false,achievements:{},
-    pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null},
+    pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]},
   };
   applyTheme();
   closeDataPanel();
