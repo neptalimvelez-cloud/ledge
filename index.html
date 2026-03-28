@@ -226,7 +226,7 @@ body::before{
 #bottom-nav{
   position:absolute;
   left:4px;
-  bottom:15%;
+  bottom:calc(15% + env(safe-area-inset-bottom,0px));
   height:40%;
   z-index:9999;
   width:48px;
@@ -339,7 +339,7 @@ body::before{
 /* ── Toast ──────────────────────────────────────────── */
 #save-toast{
   position:fixed;left:50%;transform:translateX(-50%);
-  bottom:24px;
+  bottom:max(24px,calc(env(safe-area-inset-bottom,0px) + 16px));
   background:rgba(93,232,160,0.12);
   backdrop-filter:var(--glass-blur-sm);
   -webkit-backdrop-filter:var(--glass-blur-sm);
@@ -368,7 +368,7 @@ body::before{
 #save-toast .toast-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
 
 /* ── Page container ─────────────────────────────────── */
-.page{padding:16px 16px 16px 60px;max-width:560px;margin:0 auto}
+.page{padding:16px 16px calc(80px + env(safe-area-inset-bottom,0px)) 60px;max-width:560px;margin:0 auto}
 
 /* ── Typography ─────────────────────────────────────── */
 .label{
@@ -494,7 +494,7 @@ button{
 .btn-ghost:active{background:var(--surf3)}
 .btn-red{border:1px solid rgba(255,107,122,0.3);color:var(--red)}
 .btn-grn{border:1px solid rgba(93,232,160,0.3);color:var(--grn)}
-.btn-sm{font-size:9px;padding:5px 11px;letter-spacing:0.5px}
+.btn-sm{font-size:9px;padding:7px 13px;letter-spacing:0.5px;min-height:32px}
 
 /* ── Tabs row ───────────────────────────────────────── */
 .tab-row{
@@ -716,7 +716,9 @@ button{
   -webkit-backdrop-filter:blur(40px);
   border-top:1px solid var(--bdrh);
   border-radius:var(--radius) var(--radius) 0 0;
-  padding:18px 20px;z-index:99;
+  padding:18px 20px;
+  padding-bottom:max(18px,calc(env(safe-area-inset-bottom,0px) + 8px));
+  z-index:99;
   box-sizing:border-box;display:none;
   box-shadow:0 -8px 40px rgba(0,0,0,0.5);
 }
@@ -799,6 +801,15 @@ button{
 .bal-num{font-size:38px;font-weight:300;line-height:1;letter-spacing:-1px}
 
 /* ── Debt payoff ────────────────────────────────────── */
+.payoff-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 14px;
+  background:var(--surf);
+  border:1px solid var(--bdr);
+  border-radius:var(--radius-sm);
+  border-left:2px solid var(--grn);
+  margin-bottom:6px;
+}
 .payoff-num{
   width:22px;height:22px;border-radius:50%;
   background:rgba(93,232,160,0.1);
@@ -833,8 +844,8 @@ button{
 /* ── Gap helpers ────────────────────────────────────── */
 .mt4{margin-top:4px}.mt6{margin-top:6px}.mt8{margin-top:8px}.mt10{margin-top:10px}.mt12{margin-top:12px}.mt14{margin-top:14px}.mt16{margin-top:16px}.mt18{margin-top:18px}.mt20{margin-top:20px}
 .mb4{margin-bottom:4px}.mb6{margin-bottom:6px}.mb8{margin-bottom:8px}.mb10{margin-bottom:10px}.mb12{margin-bottom:12px}.mb14{margin-bottom:14px}.mb16{margin-bottom:16px}.mb20{margin-bottom:20px}
-.flex{display:flex}.gap6{gap:6px}.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}.gap14{gap:14px}
-.f1{flex:1}.bold{font-weight:600}.items-center{align-items:center}
+.flex{display:flex}.gap8{gap:8px}.gap10{gap:10px}.gap6{gap:6px}
+.f1{flex:1}.f2{flex:2}.bold{font-weight:600}
 
 /* ── Color helpers ──────────────────────────────────── */
 .green{color:var(--grn)}.red{color:var(--red)}.acc{color:var(--acc)}.blue{color:var(--blu)}.pur{color:var(--pur)}.org{color:var(--org)}.mut{color:var(--mut)}
@@ -847,7 +858,7 @@ button{
 /* ── Quick Add FAB ─────────────────────────────────── */
 #fab-wrap{
   position:fixed;
-  bottom:24px;right:max(24px,calc((100vw - 560px)/2 + 16px));
+  bottom:max(24px,calc(env(safe-area-inset-bottom,0px) + 16px));right:max(24px,calc((100vw - 560px)/2 + 16px));
   z-index:98;
   display:flex;flex-direction:column-reverse;align-items:flex-end;gap:10px;
 }
@@ -1501,7 +1512,7 @@ function renderWizard(){
     h+='<div class="wiz-sub">Set your hourly rate and which days you work.</div>';
     h+='<div class="label">Hourly Rate</div>';
     h+='<div class="inp-row mb14"><span class="pre" style="font-size:20px;color:var(--acc)">$</span>';
-    h+='<input id="wiz-rate" type="number" min="0" step=".25" placeholder="0.00" value="'+(S.schedule.hourlyRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
+    h+='<input id="wiz-rate" type="number" inputmode="decimal" min="0" step=".25" placeholder="0.00" value="'+(S.schedule.hourlyRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
     h+='<div class="label mt14">Pay Week Starts</div>';
     h+='<select id="wiz-wsd" style="margin-bottom:14px">';
     for(let i=0;i<7;i++){h+='<option value="'+i+'"'+(parseInt(S.schedule.weekStartDay)===i?' selected':'')+'>'+DAYS_FULL[i]+'</option>';}
@@ -1522,7 +1533,7 @@ function renderWizard(){
     h+='<div class="wiz-title">Tax Rate</div>';
     h+='<div class="wiz-sub">Set your estimated tax rate for take-home calculations. You can add detailed deductions later in Setup.</div>';
     h+='<div class="label">Estimated Tax %</div>';
-    h+='<div class="inp-row mb14"><input id="wiz-tax" type="number" min="0" max="60" step="0.5" placeholder="e.g. 22" value="'+(S.taxRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"><span style="padding:0 14px;color:var(--mut);font-size:20px">%</span></div>';
+    h+='<div class="inp-row mb14"><input id="wiz-tax" type="number" inputmode="decimal" min="0" max="60" step="0.5" placeholder="e.g. 22" value="'+(S.taxRate||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"><span style="padding:0 14px;color:var(--mut);font-size:20px">%</span></div>';
     h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">Common ranges: 10\u201315% (low income), 18\u201325% (middle), 28\u201335% (higher).</div>';
     h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
   }
@@ -1545,7 +1556,7 @@ function renderWizard(){
       h+='<button class="btn-ghost btn-sm mb14" style="width:100%;color:var(--acc)" onclick="document.getElementById(&quot;wiz-annual&quot;).value=&quot;'+Math.round(projNet||projGross)+'&quot;">Use '+fmt$(Math.round(projNet||projGross))+' as my goal</button>';
     }
     h+='<div class="label">Annual Earnings Goal</div>';
-    h+='<div class="inp-row mb14"><span class="pre" style="font-size:20px;color:var(--acc)">$</span><input id="wiz-annual" type="number" min="0" step="1000" placeholder="0" value="'+(S.schedule.annualGoal||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
+    h+='<div class="inp-row mb14"><span class="pre" style="font-size:20px;color:var(--acc)">$</span><input id="wiz-annual" type="number" inputmode="decimal" min="0" step="1000" placeholder="0" value="'+(S.schedule.annualGoal||'')+'" style="font-size:28px;border:none;background:transparent;padding:10px 8px"></div>';
     h+='<div style="font-size:10px;color:var(--mut)">Shown in History \u2192 YTD as a progress bar. Leave blank to skip.</div>';
     h+='<div class="wiz-nav"><button class="btn-ghost" onclick="wizBack()">Back</button><button class="btn-acc" onclick="wizNext()">Next</button></div>';
   }
@@ -2169,7 +2180,7 @@ function renderTrackerTab(now,rate,ws,wk){
           <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
             <div class="label2">Actual paycheck received (for ${prevWkLabel})</div>
             <div class="flex gap8 mb6">
-              <div class="inp-row f1"><span class="pre">$</span><input type="number" min="0" step="0.01" placeholder="Net pay received…" value="${prevPc?.amount||''}" onblur="savePaycheck('${prevWk}','amount',this.value)" style="font-size:15px;border:none;background:transparent;padding:7px 4px"></div>
+              <div class="inp-row f1"><span class="pre">$</span><input type="number" min="0" step="0.01" placeholder="Net pay received…" value="${prevPc?.amount||''}" inputmode="decimal" oninput="savePaycheck('${prevWk}','amount',this.value)" style="font-size:15px;border:none;background:transparent;padding:7px 4px"></div>
               <input type="date" value="${prevPc?.date||''}" onchange="savePaycheck('${prevWk}','date',this.value)" style="flex:1;font-size:12px" title="Date received">
             </div>
             ${prevVariance!=null?`<div style="font-size:11px;color:${prevVariance>=0?'var(--grn)':'var(--red)'};letter-spacing:1px">${prevVariance>=0?'▲':'▼'} ${fmt$(Math.abs(prevVariance))} ${prevVariance>=0?'more':'less'} than projected</div>`:''}
@@ -2270,7 +2281,6 @@ function savePaycheck(wk,field,val){
   else S.paychecks[wk][field]=val;
   if(!S.paychecks[wk].amount)delete S.paychecks[wk];
   save('paychecks');
-  render();
 }
 function depositPaycheckToAcct(wk){
   const pc=S.paychecks[wk];if(!pc||!pc.amount||!pc.depositAcct)return;
@@ -2293,7 +2303,7 @@ function toggleQuickTx(){
     +'<div class="label">Quick Expense</div>'
     +'<div class="flex gap8 mb10">'
     +'<div class="f1"><div class="label2">Amount</div><div class="inp-row"><span class="pre">$</span>'
-    +'<input id="qtx-amt" type="number" min="0" step=".01" placeholder="0.00" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>'
+    +'<input id="qtx-amt" type="number" inputmode="decimal" min="0" step=".01" placeholder="0.00" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>'
     +'<div class="f1"><div class="label2">Description</div><input id="qtx-desc" placeholder="e.g. Coffee, Gas"></div>'
     +'</div>'
     +'<div class="label2">Category</div>'
@@ -2411,8 +2421,8 @@ function delBreakEntry(wk,dk,id){
   save('breakLog');
   renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
 }
-// Add-break inline form state for history day rows
-let _addBreak=null; // {wk, dk} when the inline add-break form is open
+// Inline add-break form for history day rows
+let _addBreak=null; // {wk, dk} when open
 function openAddBreak(wk,dk){_addBreak={wk,dk};renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
 function closeAddBreak(){_addBreak=null;renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
 function confirmAddBreak(wk,dk){
@@ -2449,7 +2459,12 @@ function autoLogCheck(){
           const wk=localStr(ws),dk=dayKey(sd);
           if(!(S.log[wk]&&S.log[wk][dk])){
             const dur=em+1440-sm;
-            S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:dur*60}};
+            const _cbl=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
+            const _cblIds=new Set(_cbl.map(b=>b.id));
+            const _pbl=(S.pause.dayKey===dk)?(S.pause.breakLog||[]).filter(b=>!_cblIds.has(b.id)):[];
+            const _brkSec=[..._cbl,..._pbl].reduce((s,b)=>s+b.sec,0);
+            const _netDur=Math.max(0,dur*60-_brkSec);
+            S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:_netDur}};
             commitBreakLog(wk,dk);
             lsSet('log_v3',S.log);showToast(false);
           }
@@ -2463,7 +2478,12 @@ function autoLogCheck(){
           const wk=localStr(ws),dk=dayKey(now);
           if(!(S.log[wk]&&S.log[wk][dk])){
             const dur=em-sm;
-            S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:dur*60}};
+            const _cbl=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
+            const _cblIds=new Set(_cbl.map(b=>b.id));
+            const _pbl=(S.pause.dayKey===dk)?(S.pause.breakLog||[]).filter(b=>!_cblIds.has(b.id)):[];
+            const _brkSec=[..._cbl,..._pbl].reduce((s,b)=>s+b.sec,0);
+            const _netDur=Math.max(0,dur*60-_brkSec);
+            S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:_netDur}};
             commitBreakLog(wk,dk);
             lsSet('log_v3',S.log);showToast(false);
           }
@@ -2506,11 +2526,17 @@ function backfillMissedShifts(){
     const ps=lsGet('pause_v3');
     if(ps&&ps.paused&&ps.dayKey===dk&&ps.pausedAt!=null)continue;
     const fullSec=dur*60;
+    // Compute net full duration accounting for any committed or pending breaks
+    const _cbl=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
+    const _cblIds=new Set(_cbl.map(b=>b.id));
+    const _pbl=(ps&&ps.dayKey===dk)?(ps.breakLog||[]).filter(b=>!_cblIds.has(b.id)):[];
+    const _brkSec=[..._cbl,..._pbl].reduce((s,b)=>s+b.sec,0);
+    const netFullSec=Math.max(0,fullSec-_brkSec);
     const existingSec=S.log[wk]&&S.log[wk][dk];
-    // If already logged at full duration, nothing to do
-    if(existingSec&&existingSec>=fullSec)continue;
-    // Log full shift duration (upgrades partial saves from mid-shift app closes)
-    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:fullSec}};
+    // If already logged at or past net-full duration, nothing to do
+    if(existingSec&&existingSec>=netFullSec)continue;
+    // Log net shift duration (full minus any breaks taken)
+    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netFullSec}};
     changed=true;
   }
   if(changed){lsSet('log_v3',S.log);}
@@ -2524,7 +2550,7 @@ function renderCSForm(){
   if(!_csFormOpen){a.innerHTML='';return;}
   a.innerHTML=`<div class="inline-form mt10">
     <div class="form-row">
-      <div><div class="label2">Label</div><input placeholder="e.g. Holiday fill-in" value="${_csForm.label}" onblur="csf('label',this.value)"></div>
+      <div><div class="label2">Label</div><input placeholder="e.g. Holiday fill-in" value="${_csForm.label}" oninput="csfStore('label',this.value)" onblur="csf('label',this.value)"></div>
       <div><div class="label2">Date</div><input type="date" value="${_csForm.date}" onchange="csf('date',this.value)"></div>
     </div>
     <div class="flex gap8 mb10">
@@ -2535,9 +2561,9 @@ function renderCSForm(){
       <div><div class="label2">End Time</div><input type="time" value="${_csForm.end}" onchange="csfTime('end',this.value)"></div>
     </div>
     <div class="form-row mb10">
-      <div><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${parseFloat(S.schedule.hourlyRate)||''}" value="${_csForm.rate}" onblur="csf('rate',this.value)" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div>
-      <div><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${_csForm.breakMins}" onblur="csf('breakMins',this.value)"></div>
-    </div>`:`<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${_csForm.gross}" onblur="csf('gross',this.value)" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>`}
+      <div><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${parseFloat(S.schedule.hourlyRate)||''}" value="${_csForm.rate}" inputmode="decimal" oninput="csfStore('rate',this.value)" onblur="csf('rate',this.value)" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div>
+      <div><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${_csForm.breakMins}" inputmode="numeric" oninput="csfStore('breakMins',this.value)" onblur="csf('breakMins',this.value)"></div>
+    </div>`:`<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${_csForm.gross}" inputmode="decimal" oninput="csfStore('gross',this.value)" onblur="csf('gross',this.value)" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>`}
     ${(()=>{if(_csForm.type==='flat'&&_csForm.gross)return`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${fmt$(parseFloat(_csForm.gross)||0)} gross</div>`;if(_csForm.type==='hourly'&&_csForm.start&&_csForm.end&&_csForm.rate){const sm=toMin(_csForm.start),em=toMin(_csForm.end),totalHrs=(em<sm?em+1440-sm:em-sm)/60,brkHrs=(parseFloat(_csForm.breakMins)||0)/60,netHrs=Math.max(0,totalHrs-brkHrs);return`<div style="font-size:11px;color:var(--pur);margin-bottom:10px">→ ${totalHrs.toFixed(2)}h${brkHrs>0?' &minus; '+_csForm.breakMins+'m breaks = '+netHrs.toFixed(2)+'h net':''} · ${fmt$(netHrs*(parseFloat(_csForm.rate)||0))} gross</div>`;}return'';})()}
     <div class="flex gap8">
       <button class="btn-acc f1" style="background:var(--pur)" onclick="saveCS()">Save Shift</button>
@@ -2547,6 +2573,8 @@ function renderCSForm(){
 }
 function csf(k,v){_csForm[k]=v;renderCSForm();}
 function csfTime(k,v){_csForm[k]=v;renderCSForm();}
+// Store-only — used with oninput on text/number fields so keyboard stays open
+function csfStore(k,v){_csForm[k]=v;}
 function purgeLogDay(dateStr){
   // Remove a single day's log entry so a custom shift can't double-count
   const wkStr=localStr(getWeekStart(parseLocal(dateStr),S.schedule.weekStartDay,S.schedule.weekStartTime));
@@ -2671,7 +2699,7 @@ function renderHistoryTab(rate){
           h+='<input type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift start">';
           h+='<span style="font-size:9px;color:var(--mut)">→</span>';
           h+='<input type="time" value="'+(pendingEnd?pendingEnd.v:'')+'" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift end">';
-          h+='<span id="hde-apply-'+dk+'" style="opacity:'+(pendingEnd?'1':'0.3')+';transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:9px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:2px 8px;border-radius:4px;background:transparent" title="Apply time edit">✓</button></span>';
+          h+='<span id="hde-apply-'+dk+'" style="opacity:'+(pendingEnd?'1':'0.3')+';transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:9px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:2px 8px;border-radius:4px;background:transparent" title="Apply">✓</button></span>';
           h+='<span style="font-size:12px;color:var(--txt);font-weight:bold;min-width:46px;text-align:right">'+fmt$(dg)+'</span>';
           h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';
           h+='</div>';
@@ -2697,7 +2725,7 @@ function renderHistoryTab(rate){
           h+='<div style="padding-left:100px;margin-top:5px">';
           if(isAddBrkOpen){
             h+='<div class="flex" style="align-items:center;gap:5px;flex-wrap:wrap">';
-            h+='<input id="add-brk-min-'+dk+'" type="number" min="1" step="1" placeholder="min" style="width:52px;font-size:11px;padding:3px 5px">';
+            h+='<input id="add-brk-min-'+dk+'" type="number" inputmode="numeric" min="1" step="1" placeholder="min" style="width:52px;font-size:11px;padding:3px 5px">';
             h+='<input id="add-brk-lbl-'+dk+'" type="text" placeholder="label (optional)" style="flex:1;font-size:11px;padding:3px 5px">';
             h+='<button onclick="confirmAddBreak(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:9px;color:var(--grn);border:1px solid rgba(80,192,80,.3);padding:2px 8px;border-radius:4px">✓</button>';
             h+='<button onclick="closeAddBreak()" style="font-size:9px;color:var(--mut);border:1px solid var(--bdr);padding:2px 8px;border-radius:4px">✕</button>';
@@ -2733,7 +2761,7 @@ function renderHistoryTab(rate){
           <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr)">
             <div class="label2 mb6">Actual Paycheck (net)</div>
             <div class="flex gap8 mb6">
-              <div class="inp-row f1"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="Net received…" value="${pc?.amount||''}" onblur="savePaycheck('${w.key}','amount',this.value)" style="border:none;background:transparent;font-size:14px;padding:6px 4px"></div>
+              <div class="inp-row f1"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="Net received…" value="${pc?.amount||''}" inputmode="decimal" oninput="savePaycheck('${w.key}','amount',this.value)" style="border:none;background:transparent;font-size:14px;padding:6px 4px"></div>
               <input type="date" value="${pc?.date||''}" onchange="savePaycheck('${w.key}','date',this.value)" style="flex:1;font-size:12px" title="Date received">
             </div>
             ${pcDiff!=null?`<div style="font-size:10px;color:${pcDiff>=0?'var(--grn)':'var(--red)'}">${pcDiff>=0?'▲':'▼'} ${fmt$(Math.abs(pcDiff))} ${pcDiff>=0?'more':'less'} than projected</div>`:''}
@@ -2869,15 +2897,13 @@ function showPayStub(wkStr){
 }
 function setHistMode(m){S.histMode=m;render();}
 function toggleWk(k){S.expandedWk=S.expandedWk===k?null:k;render();}
-// Per-day transient start/end time store — values held here until user taps Apply
-// This prevents re-rendering while the native iOS time picker is open
+// Per-day transient start/end time store — held until user taps Apply
+// Prevents re-render (and iOS time picker dismissal) on every change
 const _hdtStart={};
 const _hdtEnd={};
 function editHistDayStart(wk,dk,v){_hdtStart[dk]=v;}
 function editHistDayEndStore(wk,dk,v){
-  // Store end time WITHOUT re-rendering — avoids closing the iOS time picker
   _hdtEnd[dk]={wk,v};
-  // Show the Apply button by toggling a class on the row's apply-btn span
   const btn=document.getElementById('hde-apply-'+dk);
   if(btn)btn.style.opacity='1';
 }
@@ -2921,6 +2947,8 @@ let _hFormOpen=false,_hForm={date:todayStr(),inputType:'times',hours:'',weekHour
 function toggleHistForm(){_hFormOpen=!_hFormOpen;if(_hFormOpen)_hForm={date:todayStr(),inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};render();}
 function openHistForm(wkStr){_hFormOpen=true;_hForm={date:wkStr,inputType:'times',hours:'',weekHours:'',start:'',end:'',breakMins:'',rate:'',note:'',gross:'',takehome:''};render();window.scrollTo({top:0,behavior:'smooth'});}
 function hff(k,v){_hForm[k]=v;const a=document.getElementById('hist-form-area');if(a){const tmp=document.createElement('div');tmp.innerHTML=renderHistFormHTML();a.replaceWith(tmp.firstChild);}}
+// Store-only — used with oninput so keyboard stays open while typing
+function hffStore(k,v){_hForm[k]=v;}
 function renderHistFormHTML(){
   const f=_hForm,rate=parseFloat(S.schedule.hourlyRate)||0;
   let preview='';
@@ -2946,23 +2974,23 @@ function renderHistFormHTML(){
     <div class="label">New Historical Entry</div>
     <div class="form-row">
       <div><div class="label2">${f.inputType==='weekly'||f.inputType==='gross'?'Any Date in That Week':'Date'}</div><input type="date" value="${f.date}" onchange="hff('date',this.value)"></div>
-      <div><div class="label2">Note (optional)</div><input placeholder="e.g. Holiday" value="${f.note}" onblur="hff('note',this.value)"></div>
+      <div><div class="label2">Note (optional)</div><input placeholder="e.g. Holiday" value="${f.note}" oninput="hffStore('note',this.value)" onblur="hff('note',this.value)"></div>
     </div>
     <div class="flex gap6 mb12" style="flex-wrap:wrap">
       ${[['times','Start→End'],['hours','Daily Hours'],['gross','Gross + Pay'],['weekly','Week Total']].map(([v,l])=>`<button style="flex:1;min-width:80px;padding:7px;border:1px solid ${f.inputType===v?'var(--acc)':'var(--bdr)'};background:${f.inputType===v?'var(--accd)':'transparent'};color:${f.inputType===v?'var(--acc)':'var(--mut)'};font-size:8px" onclick="hff('inputType','${v}')">${l}</button>`).join('')}
     </div>
     ${f.inputType==='gross'?`<div class="mb12"><div class="form-row">
-      <div><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${f.gross}" onblur="hff('gross',this.value)" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
-      <div><div class="label2">Take-Home (optional)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${f.takehome}" onblur="hff('takehome',this.value)" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
+      <div><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${f.gross}" inputmode="decimal" oninput="hffStore('gross',this.value)" onblur="hff('gross',this.value)" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
+      <div><div class="label2">Take-Home (optional)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".01" placeholder="0.00" value="${f.takehome}" inputmode="decimal" oninput="hffStore('takehome',this.value)" onblur="hff('takehome',this.value)" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
     </div>${grossPreview}</div>`:''}
     ${f.inputType==='hours'?`<div class="form-row mb12">
-      <div><div class="label2">Hours Worked</div><input type="number" min="0" step=".25" placeholder="10.5" value="${f.hours}" onblur="hff('hours',this.value)"></div>
-      <div><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${f.breakMins}" onblur="hff('breakMins',this.value)"></div>
+      <div><div class="label2">Hours Worked</div><input type="number" min="0" step=".25" placeholder="10.5" value="${f.hours}" inputmode="decimal" oninput="hffStore('hours',this.value)" onblur="hff('hours',this.value)"></div>
+      <div><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${f.breakMins}" inputmode="numeric" oninput="hffStore('breakMins',this.value)" onblur="hff('breakMins',this.value)"></div>
     </div>`:''}
     ${f.inputType==='times'?`<div class="flex gap8 mb10 items-center"><div class="f1"><div class="label2">Start</div><input type="time" value="${f.start}" onchange="hff('start',this.value)"></div><span class="mut" style="margin-top:14px">→</span><div class="f1"><div class="label2">End</div><input type="time" value="${f.end}" onchange="hff('end',this.value)"></div></div>
-    <div class="mb12"><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${f.breakMins}" onblur="hff('breakMins',this.value)" style="width:120px"></div>`:''}
-    ${f.inputType==='weekly'?`<div class="mb12"><div class="label2">Total Hours for the Week</div><input type="number" min="0" step=".25" placeholder="40.0" value="${f.weekHours}" onblur="hff('weekHours',this.value)"><div style="font-size:9px;color:var(--mut);margin-top:6px;line-height:1.6">Split proportionally across ${Object.values(S.schedule.shifts).filter(s=>s.active).length} active days by shift length.</div></div>`:''}
-    ${f.inputType!=='gross'?`<div class="mb14"><div class="label2">Rate Override (blank = $${rate.toFixed(2)}/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${rate.toFixed(2)}" value="${f.rate}" onblur="hff('rate',this.value)" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 10px;color:var(--mut);font-size:11px">/hr</span></div></div>`:''}
+    <div class="mb12"><div class="label2">Break (min, optional)</div><input type="number" min="0" step="5" placeholder="0" value="${f.breakMins}" inputmode="numeric" oninput="hffStore('breakMins',this.value)" onblur="hff('breakMins',this.value)" style="width:120px"></div>`:''}
+    ${f.inputType==='weekly'?`<div class="mb12"><div class="label2">Total Hours for the Week</div><input type="number" min="0" step=".25" placeholder="40.0" value="${f.weekHours}" inputmode="decimal" oninput="hffStore('weekHours',this.value)" onblur="hff('weekHours',this.value)"><div style="font-size:9px;color:var(--mut);margin-top:6px;line-height:1.6">Split proportionally across ${Object.values(S.schedule.shifts).filter(s=>s.active).length} active days by shift length.</div></div>`:''}
+    ${f.inputType!=='gross'?`<div class="mb14"><div class="label2">Rate Override (blank = $${rate.toFixed(2)}/hr)</div><div class="inp-row"><span class="pre">$</span><input type="number" min="0" step=".25" placeholder="${rate.toFixed(2)}" value="${f.rate}" inputmode="decimal" oninput="hffStore('rate',this.value)" onblur="hff('rate',this.value)" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 10px;color:var(--mut);font-size:11px">/hr</span></div></div>`:''}
     ${preview}
     <button class="btn-acc" style="width:100%" onclick="saveHistEntry()">Save Entry</button>
   </div>`;
@@ -3145,7 +3173,7 @@ function renderDeductionsTab(now,rate,ws,wk){
           ${['flat','percent'].map(t=>`<button style="flex:1;padding:6px;border:1px solid ${d.type===t?'var(--acc)':'var(--bdr)'};background:${d.type===t?'var(--accd)':'transparent'};color:${d.type===t?'var(--acc)':'var(--mut)'};" onclick="editDedType('${d.id}','${t}')">${t==='flat'?'Flat $':'Percent %'}</button>`).join('')}
         </div>
         <div class="flex gap8">
-          <div class="inp-row f1"><span class="pre">${d.type==='flat'?'$':'%'}</span><input id="edi-val" type="number" min="0" step=".01" value="${d.value}" style="border:none;background:transparent;font-size:17px;padding:7px 4px"></div>
+          <div class="inp-row f1"><span class="pre">${d.type==='flat'?'$':'%'}</span><input id="edi-val" type="number" inputmode="decimal" min="0" step=".01" value="${d.value}" style="border:none;background:transparent;font-size:17px;padding:7px 4px"></div>
           <button class="btn-acc btn-sm" onclick="saveDedEdit('${d.id}')">Save</button>
           <button class="btn-ghost btn-sm" onclick="_editDedId=null;render()">Cancel</button>
         </div>
@@ -3182,7 +3210,7 @@ function renderDeductionsTab(now,rate,ws,wk){
         ${['flat','percent'].map(t=>`<button id="nd-${t}" style="flex:1;padding:7px;border:1px solid ${_newDed.type===t?'var(--acc)':'var(--bdr)'};background:${_newDed.type===t?'var(--accd)':'transparent'};color:${_newDed.type===t?'var(--acc)':'var(--mut)'};" onclick="setNewDedType('${t}')">${t==='flat'?'Flat $':'Percent %'}</button>`).join('')}
       </div>
       <div class="flex gap10">
-        <div class="inp-row f1"><span class="pre">${_newDed.type==='flat'?'$':'%'}</span><input id="nd-val" type="number" min="0" step=".01" placeholder="0.00" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div>
+        <div class="inp-row f1"><span class="pre">${_newDed.type==='flat'?'$':'%'}</span><input id="nd-val" type="number" inputmode="decimal" min="0" step=".01" placeholder="0.00" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div>
         <button class="btn-acc" onclick="addDed()">Add</button>
       </div>
     </div>
@@ -3245,7 +3273,7 @@ function renderSetupTab(){
     <!-- Rate -->
     <div class="section">
       <div class="label">Hourly Rate (USD)</div>
-      <div class="inp-row"><span class="pre" style="font-size:22px;color:var(--acc)">$</span><input id="s-rate" type="number" min="0" step=".25" placeholder="0.00" value="${e.hourlyRate}" style="font-size:32px;border:none;background:transparent;padding:12px 8px"></div>
+      <div class="inp-row"><span class="pre" style="font-size:22px;color:var(--acc)">$</span><input id="s-rate" type="number" inputmode="decimal" min="0" step=".25" placeholder="0.00" value="${e.hourlyRate}" style="font-size:32px;border:none;background:transparent;padding:12px 8px"></div>
     </div>
 
     <!-- Pay Week -->
@@ -3269,8 +3297,8 @@ function renderSetupTab(){
         ${[['shift','Per Shift','OT after X hrs in one shift'],['week','Per Week','OT after X hrs total in the week']].map(([v,l,sub])=>`<button id="s-otm-${v}" style="flex:1;padding:9px 8px;text-align:left;border:1px solid ${(e.overtimeMode||'shift')===v?'var(--acc)':'var(--bdr)'};background:${(e.overtimeMode||'shift')===v?'var(--accd)':'transparent'};color:${(e.overtimeMode||'shift')===v?'var(--acc)':'var(--mut)'}" onclick="setSchOtMode('${v}')"><div style="font-size:10px;font-weight:bold;margin-bottom:2px">${l}</div><div style="font-size:8px;opacity:.7">${sub}</div></button>`).join('')}
       </div>
       <div class="form-row">
-        <div><div class="label2">OT After (hrs/${(e.overtimeMode||'shift')==='week'?'week':'shift'})</div><input id="s-ota" type="number" min="0" step=".5" placeholder="${(e.overtimeMode||'shift')==='week'?40:8}" value="${e.overtimeAfter||''}"></div>
-        <div><div class="label2">Multiplier</div><input id="s-otm2" type="number" min="1" step=".25" placeholder="1.5" value="${e.overtimeMultiplier||''}"></div>
+        <div><div class="label2">OT After (hrs/${(e.overtimeMode||'shift')==='week'?'week':'shift'})</div><input id="s-ota" type="number" inputmode="decimal" min="0" step=".5" placeholder="${(e.overtimeMode||'shift')==='week'?40:8}" value="${e.overtimeAfter||''}"></div>
+        <div><div class="label2">Multiplier</div><input id="s-otm2" type="number" inputmode="decimal" min="1" step=".25" placeholder="1.5" value="${e.overtimeMultiplier||''}"></div>
       </div>
       ${e.overtimeAfter&&e.hourlyRate?`<div style="font-size:9px;color:var(--org)">OT rate: $${(parseFloat(e.hourlyRate)*(parseFloat(e.overtimeMultiplier)||1.5)).toFixed(2)}/hr after ${e.overtimeAfter}h/${(e.overtimeMode||'shift')==='week'?'wk':'shift'}</div>`:''}
       <div style="font-size:9px;color:var(--mut);margin-top:6px">Leave blank to disable</div>
@@ -3282,7 +3310,7 @@ function renderSetupTab(){
       <div style="font-size:10px;color:var(--mut);margin-bottom:12px;line-height:1.6">Define common break durations shown as quick-add buttons during a shift.</div>
       ${(e.breakRules||[]).map((br,i)=>`<div class="flex gap8 mb8">
         <input value="${br.label}" oninput="schBreakLabel(${i},this.value)" style="flex:2" placeholder="Label">
-        <input type="number" min="1" max="480" value="${br.minutes}" oninput="schBreakMins(${i},this.value)" style="flex:1" placeholder="30">
+        <input type="number" min="1" max="480" value="${br.minutes}" oninput="schBreakMins(${i},this.value)" inputmode="numeric" style="flex:1" placeholder="30">
         <span style="font-size:9px;color:var(--mut);align-self:center">min</span>
         <button class="btn-sm btn-red" onclick="schBreakDel(${i})">✕</button>
       </div>`).join('')}
@@ -3335,7 +3363,7 @@ function renderSetupTab(){
     <!-- Tax rate -->
     <div class="section mt14">
       <div class="label">Estimated Tax Rate (for YTD estimate)</div>
-      <div class="inp-row"><input id="s-tax" type="number" min="0" max="60" step="0.5" placeholder="e.g. 22" value="${_editSch.taxRate||S.taxRate||''}" style="border:none;background:transparent;font-size:24px;padding:10px 8px"><span style="padding:0 14px;color:var(--mut);font-size:18px">%</span></div>
+      <div class="inp-row"><input id="s-tax" type="number" inputmode="decimal" min="0" max="60" step="0.5" placeholder="e.g. 22" value="${_editSch.taxRate||S.taxRate||''}" style="border:none;background:transparent;font-size:24px;padding:10px 8px"><span style="padding:0 14px;color:var(--mut);font-size:18px">%</span></div>
       <div style="font-size:9px;color:var(--mut);margin-top:6px">Applied as a percent deduction on all gross earnings throughout the app.</div>
     </div>
 
@@ -3345,8 +3373,8 @@ function renderSetupTab(){
       <div style="font-size:10px;color:var(--mut);margin-bottom:10px;line-height:1.6">Convert between hourly rate, annual salary, and take-home pay.</div>
       <div id="income-calc-area">
         <div class="flex gap8 mb10">
-          <div class="f1"><div class="label2">Annual Target</div><div class="inp-row"><span class="pre">$</span><input id="ic-annual" type="number" min="0" step="1000" placeholder="50000" oninput="calcIncome('annual')" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
-          <div class="f1"><div class="label2">Hours / Week</div><input id="ic-hrs" type="number" min="1" max="80" step="1" value="40" oninput="calcIncome('hrs')"></div>
+          <div class="f1"><div class="label2">Annual Target</div><div class="inp-row"><span class="pre">$</span><input id="ic-annual" type="number" inputmode="decimal" min="0" step="1000" placeholder="50000" oninput="calcIncome('annual')" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
+          <div class="f1"><div class="label2">Hours / Week</div><input id="ic-hrs" type="number" inputmode="decimal" min="1" max="80" step="1" value="40" oninput="calcIncome('hrs')"></div>
         </div>
         <div id="ic-result" style="font-size:10px;color:var(--acc);line-height:1.8;min-height:40px"></div>
       </div>
@@ -3357,14 +3385,14 @@ function renderSetupTab(){
       <div class="label">Annual Earnings Goal</div>
       <div style="font-size:10px;color:var(--mut);margin-bottom:10px;line-height:1.6">Track your year-to-date progress in History → YTD.</div>
       <div id="annual-goal-calc"></div>
-      <div class="inp-row"><span class="pre" style="font-size:18px;color:var(--acc)">$</span><input id="s-annual" type="number" min="0" step="1000" placeholder="Annual target" value="${S.schedule.annualGoal||''}" style="border:none;background:transparent;font-size:22px;padding:8px 4px"></div>
+      <div class="inp-row"><span class="pre" style="font-size:18px;color:var(--acc)">$</span><input id="s-annual" type="number" inputmode="decimal" min="0" step="1000" placeholder="Annual target" value="${S.schedule.annualGoal||''}" style="border:none;background:transparent;font-size:22px;padding:8px 4px"></div>
     </div>
 
     <!-- Income Safety Threshold -->
     <div class="card mt14" style="border:1px solid var(--bdrh)">
       <div class="label">Income Safety Floor</div>
       <div style="font-size:10px;color:var(--mut);margin-bottom:10px;line-height:1.6">Get an alert on Budget Overview when monthly earnings fall below this target.</div>
-      <div class="inp-row"><span class="pre">$</span><input id="s-floor" type="number" min="0" step="100" placeholder="No floor set" value="${S.incomeSafetyThresholds.monthlyFloor||''}" onblur="S.incomeSafetyThresholds.monthlyFloor=this.value;save('incomeSafetyThresholds')" style="border:none;background:transparent;font-size:18px;padding:8px 4px"><span style="padding:0 10px;color:var(--mut);font-size:10px">/ month</span></div>
+      <div class="inp-row"><span class="pre">$</span><input id="s-floor" type="number" inputmode="decimal" min="0" step="100" placeholder="No floor set" value="${S.incomeSafetyThresholds.monthlyFloor||''}" inputmode="decimal" oninput="S.incomeSafetyThresholds.monthlyFloor=this.value;save('incomeSafetyThresholds')" style="border:none;background:transparent;font-size:18px;padding:8px 4px"><span style="padding:0 10px;color:var(--mut);font-size:10px">/ month</span></div>
     </div>
 
     <!-- PIN -->
@@ -3916,7 +3944,7 @@ function renderBudgetExpenses(){
         +'<span style="font-size:9px;color:'+(over?'var(--red)':'var(--mut)')+'">'+fmt$(spent)+(hasTx?'*':'')+(limit?' / '+fmt$(limit):'')+' /mo</span>'
         +'<div style="display:flex;align-items:center;border:1px solid var(--bdrh);background:var(--bg)">'
         +'<span style="padding:0 6px;color:var(--mut);font-size:11px">$</span>'
-        +'<input type="number" min="0" step="10" placeholder="No limit" value="'+(limit||'')+'" onblur="setEnvLimit(\''+cat.id+'\',this.value)" style="border:none;background:transparent;font-size:11px;padding:4px;width:70px;color:var(--txt)">'
+        +'<input type="number" min="0" step="10" placeholder="No limit" value="'+(limit||'')+'" inputmode="decimal" oninput="setEnvLimit(\''+cat.id+'\',this.value)" style="border:none;background:transparent;font-size:11px;padding:4px;width:70px;color:var(--txt)">'
         +'</div></div></div>'
         +(limit?'<div class="prog"><div class="prog-fill" style="width:'+pct+'%;background:'+(over?'var(--red)':pct>80?'var(--org)':'var(--grn)')+'"></div></div>':'<div style="height:3px;background:var(--bdr);border-radius:1px"></div>')
         +'</div>';
@@ -3929,11 +3957,11 @@ function renderBudgetExpenses(){
     <div class="chips mb10">${CATS.map(cat=>`<button class="chip${_expForm.category===cat.id?' active':''}" style="${_expForm.category===cat.id?`border-color:${cat.color};background:${cat.color}22;color:${cat.color}`:`color:var(--mut)`}" onclick="setExpCat('${cat.id}')">${cat.icon} ${cat.label}</button>`).join('')}</div>
     ${_expForm.category==='custom'?`<input id="ef-cc" placeholder="Custom category" value="${_expForm.customCategory}" style="margin-bottom:10px">`:''}
     <div class="form-row">
-      <div class="inp-row" style="flex:1"><span class="pre" style="font-size:16px">$</span><input id="ef-amt" type="number" min="0" step=".01" placeholder="0.00" value="${_expForm.amount}" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div>
+      <div class="inp-row" style="flex:1"><span class="pre" style="font-size:16px">$</span><input id="ef-amt" type="number" inputmode="decimal" min="0" step=".01" placeholder="0.00" value="${_expForm.amount}" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div>
       <select id="ef-freq" style="flex:1">${FREQ.map(f=>`<option value="${f.id}" ${_expForm.frequency===f.id?'selected':''}>${f.label}</option>`).join('')}</select>
     </div>
     ${_expForm.frequency==='one-time'?`<div class="mt8"><div class="label2">Due Date</div><input id="ef-date" type="date" value="${_expForm.oneTimeDate}"></div>`:''}
-    ${_expForm.frequency!=='one-time'?`<div class="mt8"><div class="label2">Day of Month (optional — for precise forecast & calendar)</div><input id="ef-dom" type="number" min="1" max="31" placeholder="e.g. 15" value="${_expForm.dayOfMonth||''}" style="width:100px"></div>`:''}
+    ${_expForm.frequency!=='one-time'?`<div class="mt8"><div class="label2">Day of Month (optional — for precise forecast & calendar)</div><input id="ef-dom" type="number" inputmode="numeric" min="1" max="31" placeholder="e.g. 15" value="${_expForm.dayOfMonth||''}" style="width:100px"></div>`:''}
     <div class="mt8"><div class="label2">Deduct from Account (optional)</div>
       <select id="ef-acct" style="font-size:11px">${'<option value="">None</option>'+S.assets.filter(a=>ACCOUNT_TYPES.map(t=>t.id).includes(a.type)).map(a=>'<option value="'+a.id+'"'+(_expForm.accountId===a.id?' selected':'')+'>'+a.label+' ('+fmt$(a.value)+')</option>').join('')}</select>
     </div>
@@ -4495,8 +4523,8 @@ function renderBudgetGoals(){
       <div class="label">New Goal</div>
       <input id="gf-label" placeholder="Goal name" value="${_goalForm.label}" style="margin-bottom:10px">
       <div class="form-row">
-        <div><div class="label2">Target</div><div class="inp-row"><span class="pre">$</span><input id="gf-target" type="number" min="0" placeholder="0" value="${_goalForm.target}" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
-        <div><div class="label2">Already Saved</div><div class="inp-row"><span class="pre">$</span><input id="gf-saved" type="number" min="0" placeholder="0" value="${_goalForm.saved}" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
+        <div><div class="label2">Target</div><div class="inp-row"><span class="pre">$</span><input id="gf-target" type="number" inputmode="decimal" min="0" placeholder="0" value="${_goalForm.target}" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
+        <div><div class="label2">Already Saved</div><div class="inp-row"><span class="pre">$</span><input id="gf-saved" type="number" inputmode="decimal" min="0" placeholder="0" value="${_goalForm.saved}" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
       </div>
       <div class="mt8">
         <div class="label2">Link to Account (auto-sync balance)</div>
@@ -4524,7 +4552,7 @@ function renderBudgetGoals(){
         <div class="flex" style="justify-content:space-between;margin-bottom:8px;font-size:12px"><span style="color:var(--acc);font-weight:bold">${fmt$(savedAmt)}</span><span style="color:var(--mut)">of ${fmt$(target)}</span></div>
         <div class="goal-bar"><div class="goal-fill" style="width:${pct}%"></div></div>
         <div class="flex" style="justify-content:space-between;font-size:9px;color:var(--mut);margin-bottom:10px"><span>${Math.round(pct)}% · ${fmt$(remain)} to go</span>${wks?`<span>~${wks} wks at surplus</span>`:''}</div>
-        ${!linkedAcct?`<div class="flex" style="align-items:center;gap:8px"><span style="font-size:9px;color:var(--mut);white-space:nowrap">UPDATE:</span><div class="inp-row f1"><span class="pre">$</span><input type="number" min="0" value="${g.saved}" onblur="updateGoalSaved('${g.id}',this.value)" style="border:none;background:transparent;font-size:13px;padding:5px 4px"></div></div>`:''}
+        ${!linkedAcct?`<div class="flex" style="align-items:center;gap:8px"><span style="font-size:9px;color:var(--mut);white-space:nowrap">UPDATE:</span><div class="inp-row f1"><span class="pre">$</span><input type="number" min="0" value="${g.saved}" inputmode="decimal" oninput="updateGoalSaved('${g.id}',this.value)" style="border:none;background:transparent;font-size:13px;padding:5px 4px"></div></div>`:''}
         ${!linkedAcct?`<div style="margin-top:8px">${linkableAccts.length?`<select onchange="linkGoalAccount('${g.id}',this.value)" style="font-size:9px;background:var(--bg);border:1px solid var(--bdrh);color:var(--mut);padding:4px 6px;width:100%"><option value="">Link to account…</option>${linkableAccts.map(a=>`<option value="${a.id}">${a.label} — ${fmt$(a.value)}</option>`).join('')}</select>`:`<div style="font-size:9px;color:var(--mut2)">Add accounts in <button onclick="switchApp('worth');setTab('accounts')" style="font-size:9px;color:var(--blu);background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">Net Worth → Accounts</button> to link</div>`}</div>`:''}
         ${linkedAcct?`<button style="font-size:9px;color:var(--mut);background:none;border:none;cursor:pointer;padding:4px 0" onclick="linkGoalAccount('${g.id}','')">Unlink account</button>`:''}
       </div>`;
@@ -4631,7 +4659,7 @@ function renderBudgetDebt(){
         ${[['snowball','Snowball','Smallest balance first'],['avalanche','Avalanche','Highest rate first']].map(([v,l,sub])=>`<button style="flex:1;padding:10px 8px;text-align:left;border:1px solid ${_debtMethod===v?'var(--acc)':'var(--bdr)'};background:${_debtMethod===v?'var(--accd)':'transparent'};color:${_debtMethod===v?'var(--acc)':'var(--mut)'}" onclick="_debtMethod='${v}';renderBudgetDebt()"><div style="font-size:11px;font-weight:bold;margin-bottom:3px">${l}</div><div style="font-size:8px;opacity:.7">${sub}</div></button>`).join('')}
       </div>
       <div class="label2">Extra Monthly Payment</div>
-      <div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step="10" placeholder="${Math.round(effExtra)||0}" value="${_debtExtra}" oninput="_debtExtra=this.value;renderBudgetDebt()" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div>
+      <div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step="10" inputmode="decimal" placeholder="${Math.round(effExtra)||0}" value="${_debtExtra}" oninput="_debtExtra=this.value;renderBudgetDebt()" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div>
       ${mBal>0?`<div style="font-size:9px;color:var(--mut);margin-top:6px">Monthly surplus is ${fmt$(mBal)} — allocate some toward debt</div>`:''}
     </div>`:''}
 
@@ -4663,12 +4691,12 @@ function renderBudgetDebt(){
       <div class="label">Add Debt</div>
       <input id="df-label" placeholder="Debt name (e.g. Visa, Student Loan)" style="margin-bottom:10px">
       <div class="form-row">
-        <div><div class="label2">Balance</div><div class="inp-row"><span class="pre">$</span><input id="df-bal" type="number" min="0" placeholder="0.00" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
-        <div><div class="label2">APR %</div><div class="inp-row"><input id="df-rate" type="number" min="0" step=".1" placeholder="0.0" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 8px;color:var(--mut)">%</span></div></div>
+        <div><div class="label2">Balance</div><div class="inp-row"><span class="pre">$</span><input id="df-bal" type="number" inputmode="decimal" min="0" placeholder="0.00" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
+        <div><div class="label2">APR %</div><div class="inp-row"><input id="df-rate" type="number" inputmode="decimal" min="0" step=".1" placeholder="0.0" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 8px;color:var(--mut)">%</span></div></div>
       </div>
       <div class="form-row">
-        <div><div class="label2">Minimum Monthly</div><div class="inp-row"><span class="pre">$</span><input id="df-min" type="number" min="0" placeholder="0.00" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
-        <div><div class="label2">Day of Month Due</div><input id="df-dom" type="number" min="1" max="31" placeholder="e.g. 15" style="flex:1"></div>
+        <div><div class="label2">Minimum Monthly</div><div class="inp-row"><span class="pre">$</span><input id="df-min" type="number" inputmode="decimal" min="0" placeholder="0.00" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
+        <div><div class="label2">Day of Month Due</div><input id="df-dom" type="number" inputmode="numeric" min="1" max="31" placeholder="e.g. 15" style="flex:1"></div>
       </div>
       <div class="flex gap8 mt4"><button class="btn-acc f1" onclick="saveDebt()">Add Debt</button><button class="btn-ghost" onclick="_showDebtForm=false;renderBudgetDebt()">Cancel</button></div>
     </div>`:`<button class="btn-ghost mt8" style="width:100%;border:1px dashed var(--bdrh)" onclick="_showDebtForm=true;renderBudgetDebt()">+ Add Debt</button>`}
@@ -4756,7 +4784,7 @@ function renderAccounts(){
       +ACCOUNT_TYPES.map(t=>'<option value="'+t.id+'">'+t.icon+' '+t.label+'</option>').join('')
       +'</select></div>'
       +'<div class="f1"><div class="label2">Current Balance</div><div class="inp-row"><span class="pre">$</span>'
-      +'<input id="ac-value" type="number" min="0" step="100" placeholder="0" style="border:none;background:transparent;font-size:15px;padding:7px 4px">'
+      +'<input id="ac-value" type="number" inputmode="decimal" min="0" step="100" placeholder="0" style="border:none;background:transparent;font-size:15px;padding:7px 4px">'
       +'</div></div></div>'
       +'<div class="mb10"><div class="label2">Note (optional)</div><input id="ac-note" placeholder="e.g. Employer match included"></div>'
       +'<div class="flex gap8"><button class="btn-acc f1" onclick="saveAccount()">Add Account</button>'
@@ -4797,7 +4825,7 @@ function renderAccounts(){
           +'<div class="f1"><div class="label2">Per Paycheck ($)</div>'
           +'<div style="display:flex;align-items:center;border:1px solid var(--bdrh);background:var(--surf)">'
           +'<span style="padding:0 6px;color:var(--mut);font-size:11px">$</span>'
-          +'<input id="pp-'+a.id+'" type="number" min="0" step="5" placeholder="0" value="'+(pp||'')+'" '
+          +'<input id="pp-'+a.id+'" type="number" inputmode="decimal" min="0" step="5" placeholder="0" value="'+(pp||'')+'" '
           +'style="border:none;background:transparent;font-size:14px;padding:6px 4px;width:80px;color:var(--txt)">'
           +'</div></div>'
           +'<div style="display:flex;align-items:flex-end"><button class="btn-acc btn-sm" onclick="saveAcctContrib(\''+a.id+'\',parseFloat(document.getElementById(\'pp-'+a.id+'\').value)||0)">Save</button></div>'
@@ -4808,7 +4836,7 @@ function renderAccounts(){
           +'<div class="f1"><div class="label2">Actual Balance</div>'
           +'<div style="display:flex;align-items:center;border:1px solid var(--bdrh);background:var(--surf)">'
           +'<span style="padding:0 6px;color:var(--mut);font-size:11px">$</span>'
-          +'<input id="an-'+a.id+'" type="number" min="0" step="100" placeholder="Enter current balance" '
+          +'<input id="an-'+a.id+'" type="number" inputmode="decimal" min="0" step="100" placeholder="Enter current balance" '
           +'style="border:none;background:transparent;font-size:14px;padding:6px 4px;flex:1;color:var(--txt)">'
           +'</div></div>'
           +'<div style="display:flex;align-items:flex-end"><button class="btn-acc btn-sm" style="background:var(--blu)" '
@@ -4827,7 +4855,7 @@ function renderAccounts(){
         +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
         +'<div style="display:flex;align-items:center;border:1px solid var(--bdrh);background:var(--bg)">'
         +'<span style="padding:0 6px;color:var(--mut);font-size:11px">$</span>'
-        +'<input type="number" min="0" step="100" value="'+a.value+'" onblur="updateAccountValue(\''+a.id+'\',this.value)" onclick="event.stopPropagation()" '
+        +'<input type="number" min="0" step="100" value="'+a.value+'" inputmode="decimal" oninput="updateAccountValue(\''+a.id+'\',this.value)" onclick="event.stopPropagation()" '
         +'style="border:none;background:transparent;font-size:13px;padding:5px 4px;width:90px;color:'+at.color+';font-weight:bold;text-align:right">'
         +'</div>'+delta+'</div>'
         +'<button class="btn-sm btn-red" onclick="event.stopPropagation();delAsset(\''+a.id+'\');renderAccounts()">✕</button>'
@@ -4863,17 +4891,17 @@ function renderAccounts(){
       '<div class="mb10"><div class="label2">Contribution Type</div><div class="flex gap8 mb8">'+typeButtons+'</div></div>'
       +'<div class="mb10"><div class="label2">Your Contribution</div><div class="flex gap8 mb8">'+empButtons+'</div>'
       +'<div class="inp-row"><span class="pre">'+(r.employeeType==='percent'?'%':'$')+'</span>'
-      +'<input type="number" min="0" step="'+(r.employeeType==='percent'?'0.5':'10')+'" placeholder="'+(r.employeeType==='percent'?'6':'100')+'" value="'+r.employeeAmount+'" '
-      +'onblur="S.retirement401k.employeeAmount=this.value;save(\'retirement401k\');renderAccounts()" '
+      +'<input type="number" min="0" step="'+(r.employeeType==='percent'?'0.5':'10')+'" inputmode="decimal" placeholder="'+(r.employeeType==='percent'?'6':'100')+'" value="'+r.employeeAmount+'" '
+      +'inputmode="decimal" oninput="S.retirement401k.employeeAmount=this.value;save(\'retirement401k\')" '
       +'style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>'
       +'<div class="mb4"><div class="label2">Employer Match</div>'
       +'<div style="font-size:9px;color:var(--mut);margin-bottom:8px">e.g. 100% up to 3% of salary</div>'
       +'<div class="flex gap8">'
       +'<div class="f1"><div class="label2">Match %</div><div class="inp-row">'
-      +'<input type="number" min="0" step="25" placeholder="100" value="'+r.matchFormula+'" onblur="S.retirement401k.matchFormula=this.value;save(\'retirement401k\');renderAccounts()" style="border:none;background:transparent;font-size:15px;padding:7px 4px">'
+      +'<input type="number" min="0" step="25" placeholder="100" value="'+r.matchFormula+'" inputmode="numeric" oninput="S.retirement401k.matchFormula=this.value;save(\'retirement401k\')" style="border:none;background:transparent;font-size:15px;padding:7px 4px">'
       +'<span style="padding:0 8px;color:var(--mut)">%</span></div></div>'
       +'<div class="f1"><div class="label2">Up to % Salary</div><div class="inp-row">'
-      +'<input type="number" min="0" step="0.5" placeholder="3" value="'+r.matchUpTo+'" onblur="S.retirement401k.matchUpTo=this.value;save(\'retirement401k\');renderAccounts()" style="border:none;background:transparent;font-size:15px;padding:7px 4px">'
+      +'<input type="number" min="0" step="0.5" placeholder="3" value="'+r.matchUpTo+'" inputmode="decimal" oninput="S.retirement401k.matchUpTo=this.value;save(\'retirement401k\')" style="border:none;background:transparent;font-size:15px;padding:7px 4px">'
       +'<span style="padding:0 8px;color:var(--mut)">%</span></div></div>'
       +'</div></div>'+matchWarning;
   }
@@ -5013,7 +5041,7 @@ function renderNetWorth(){
         ${items.map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:var(--surf);margin-bottom:4px;border-left:2px solid ${at.color}">
           <span style="font-size:12px">${a.label}</span>
           <div style="display:flex;align-items:center;gap:6px">
-            <div style="display:flex;align-items:center;border:1px solid var(--bdrh);background:var(--bg)"><span style="padding:0 6px;color:var(--mut);font-size:11px">$</span><input type="number" min="0" step="100" value="${a.value}" onblur="updateAssetValue('${a.id}',this.value)" style="border:none;background:transparent;font-size:12px;padding:4px;width:80px;color:${at.color};font-weight:bold"></div>
+            <div style="display:flex;align-items:center;border:1px solid var(--bdrh);background:var(--bg)"><span style="padding:0 6px;color:var(--mut);font-size:11px">$</span><input type="number" min="0" step="100" value="${a.value}" inputmode="decimal" oninput="updateAssetValue('${a.id}',this.value)" style="border:none;background:transparent;font-size:12px;padding:4px;width:80px;color:${at.color};font-weight:bold"></div>
             <button class="btn-sm btn-red" onclick="delAsset('${a.id}')">✕</button>
           </div>
         </div>`).join('')}
@@ -5246,13 +5274,14 @@ function renderRetirement(){
     <div class="card mb20">
       <div class="label">Inputs</div>
       <div class="flex gap8 mb10">
-        <div class="f1"><div class="label2">Target ($)</div><div class="inp-row"><span class="pre">$</span><input id="ret-target" type="number" min="0" step="10000" value="${f.target}" onblur="_retForm.target=this.value;renderRetirement()" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
-        <div class="f1"><div class="label2">Return Rate</div><div class="inp-row"><input id="ret-rate" type="number" min="0" max="30" step="0.5" value="${f.returnRate}" onblur="_retForm.returnRate=this.value;renderRetirement()" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 8px;color:var(--mut)">%</span></div></div>
+        <div class="f1"><div class="label2">Target ($)</div><div class="inp-row"><span class="pre">$</span><input id="ret-target" type="number" min="0" step="10000" value="${f.target}" inputmode="decimal" oninput="_retForm.target=this.value" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
+        <div class="f1"><div class="label2">Return Rate</div><div class="inp-row"><input id="ret-rate" type="number" min="0" max="30" step="0.5" value="${f.returnRate}" inputmode="decimal" oninput="_retForm.returnRate=this.value" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 8px;color:var(--mut)">%</span></div></div>
       </div>
       <div class="flex gap8 mb10">
-        <div class="f1"><div class="label2">Time Horizon (yrs)</div><input id="ret-years" type="number" min="1" max="60" value="${f.years}" onblur="_retForm.years=this.value;renderRetirement()"></div>
-        <div class="f1"><div class="label2">Monthly Contribution</div><div class="inp-row"><span class="pre">$</span><input id="ret-monthly" type="number" min="0" step="50" placeholder="0" value="${f.monthly}" onblur="_retForm.monthly=this.value;renderRetirement()" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
+        <div class="f1"><div class="label2">Time Horizon (yrs)</div><input id="ret-years" type="number" min="1" max="60" value="${f.years}" inputmode="numeric" oninput="_retForm.years=this.value"></div>
+        <div class="f1"><div class="label2">Monthly Contribution</div><div class="inp-row"><span class="pre">$</span><input id="ret-monthly" type="number" min="0" step="50" placeholder="0" value="${f.monthly}" inputmode="decimal" oninput="_retForm.monthly=this.value" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>
       </div>
+      <button class="btn-acc" style="width:100%;margin-bottom:10px" onclick="renderRetirement()">Recalculate</button>
       <div style="font-size:9px;color:var(--mut);line-height:1.6">Starting from current net worth ${fmt$(curNW)}. Return rate uses compound monthly growth.</div>
     </div>
 
@@ -6194,7 +6223,7 @@ function renderFabShift(panel){
   h+='<div class="label" style="margin:0;color:var(--pur)">\u25C9 Log Shift</div>';
   h+='<button class="btn-ghost btn-sm" onclick="closeFabPanel()">\u2715</button></div>';
   h+='<div class="form-row">';
-  h+='<div><div class="label2">Label</div><input id="fab-cs-label" placeholder="e.g. OT Saturday" value="'+_fabShift.label+'" onblur="_fabShift.label=this.value"></div>';
+  h+='<div><div class="label2">Label</div><input id="fab-cs-label" placeholder="e.g. OT Saturday" value="'+_fabShift.label+'" oninput="_fabShift.label=this.value"></div>';
   h+='<div><div class="label2">Date</div><input type="date" id="fab-cs-date" value="'+_fabShift.date+'" onchange="_fabShift.date=this.value"></div>';
   h+='</div>';
   h+='<div class="flex gap8 mb10">';
@@ -6202,8 +6231,8 @@ function renderFabShift(panel){
   h+='<button style="flex:1;padding:7px;border:1px solid '+(!isH?'var(--pur)':'var(--bdr)')+';background:'+(!isH?'var(--purd)':'transparent')+';color:'+(!isH?'var(--pur)':'var(--mut)')+'" onclick="fabShiftType(&quot;flat&quot;)">Flat Amount</button>';
   h+='</div>';
   if(isH){
-    h+='<div class="form-row"><div><div class="label2">Hours</div><input id="fab-cs-hrs" type="number" min="0" step=".25" placeholder="8.0" value="'+_fabShift.hours+'" oninput="_fabShift.hours=this.value"></div>';
-    h+='<div><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input id="fab-cs-rate" type="number" min="0" step=".25" placeholder="'+defRate+'" value="'+_fabShift.rate+'" oninput="_fabShift.rate=this.value" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div></div>';
+    h+='<div class="form-row"><div><div class="label2">Hours</div><input id="fab-cs-hrs" type="number" inputmode="decimal" min="0" step=".25" placeholder="8.0" value="'+_fabShift.hours+'" oninput="_fabShift.hours=this.value"></div>';
+    h+='<div><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input id="fab-cs-rate" type="number" inputmode="decimal" min="0" step=".25" placeholder="'+defRate+'" value="'+_fabShift.rate+'" oninput="_fabShift.rate=this.value" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div></div>';
   } else {
     h+='<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input id="fab-cs-gross" type="number" min="0" step=".01" placeholder="0.00" value="'+_fabShift.gross+'" oninput="_fabShift.gross=this.value" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>';
   }
