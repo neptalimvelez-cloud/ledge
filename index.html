@@ -2065,13 +2065,13 @@ function renderTrackerTab(now,rate,ws,wk){
       }else if(sec>0){
         // Both spill and own shift: combine
         if(overnight){
-          dayBg='background:linear-gradient(180deg,'+grnS+'0.15) 0%,'+grnS+'0.08) '+prevEPct2+'%,transparent '+prevEPct2+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) 100%);';
+          dayBg='background:linear-gradient(180deg,'+grnS+'0.22) 0%,'+grnS+'0.15) '+prevEPct2+'%,transparent '+prevEPct2+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) 100%);';
         }else{
-          dayBg='background:linear-gradient(180deg,'+grnS+'0.15) 0%,'+grnS+'0.08) '+prevEPct2+'%,transparent '+prevEPct2+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) '+ePct+'%,transparent '+ePct+'%);';
+          dayBg='background:linear-gradient(180deg,'+grnS+'0.22) 0%,'+grnS+'0.15) '+prevEPct2+'%,transparent '+prevEPct2+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) '+ePct+'%,transparent '+ePct+'%);';
         }
       }else{
         // Only spill, no own logged hours
-        dayBg='background:linear-gradient(180deg,'+grnS+'0.15) 0%,'+grnS+'0.08) '+prevEPct2+'%,transparent '+prevEPct2+'%);';
+        dayBg='background:linear-gradient(180deg,'+grnS+'0.22) 0%,'+grnS+'0.15) '+prevEPct2+'%,transparent '+prevEPct2+'%);';
       }
     }
     if(isLive){
@@ -2827,13 +2827,15 @@ function renderHistoryTab(rate){
             if(ptoEntries.length){
               for(const [pdk,psec] of ptoEntries){
                 const pdd=parseLocal(pdk);
-                const phrs=psec/3600;
-                const pearn=phrs*ptoRate;
+                const phrs=Math.floor(psec/3600);
+                const pmins=Math.round((psec%3600)/60);
+                const pearn=(psec/3600)*ptoRate;
+                const pLabel=pmins>0?(phrs>0?phrs+'h '+pmins+'m':pmins+'m'):phrs+'h';
                 ph+='<div class="flex" style="align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr)">';
                 ph+='<div class="flex" style="align-items:baseline;gap:6px">';
                 ph+='<span style="font-size:12px;font-weight:600;color:var(--blu)">'+DAYS[pdd.getDay()]+'</span>';
                 ph+='<span style="font-size:10px;color:var(--mut)">'+pdk+'</span>';
-                ph+='<span style="font-size:10px;color:var(--blu)">'+phrs.toFixed(1)+'h</span>';
+                ph+='<span style="font-size:10px;color:var(--blu)">'+pLabel+'</span>';
                 ph+='</div>';
                 ph+='<div class="flex" style="align-items:center;gap:8px">';
                 ph+='<span style="font-size:13px;font-weight:bold;color:var(--blu)">'+fmt$(pearn)+'</span>';
@@ -2848,7 +2850,8 @@ function renderHistoryTab(rate){
               ph+='<div style="margin-top:8px;padding:10px;background:var(--surf2);border-radius:var(--radius-sm)">';
               ph+='<div class="flex gap8 mb8">';
               ph+='<div style="flex:1"><div class="label2">Date</div><input type="date" value="'+(_ptoStore.date||'')+'" onchange="ptoFieldStore(\'date\',this.value)" style="width:100%;font-size:12px;padding:6px"></div>';
-              ph+='<div style="width:80px"><div class="label2">Hours</div><input type="number" min="0" step="0.5" placeholder="8" value="'+(_ptoStore.hours||'')+'" inputmode="decimal" oninput="ptoFieldStore(\'hours\',this.value)" style="width:100%;font-size:12px;padding:6px"></div>';
+              ph+='<div style="width:56px"><div class="label2">Hours</div><input type="number" min="0" step="1" placeholder="8" value="'+(_ptoStore.hours||'')+'" inputmode="numeric" oninput="ptoFieldStore(\'hours\',this.value)" style="width:100%;font-size:12px;padding:6px"></div>';
+              ph+='<div style="width:56px"><div class="label2">Min</div><input type="number" min="0" max="59" step="1" placeholder="0" value="'+(_ptoStore.mins||'')+'" inputmode="numeric" oninput="ptoFieldStore(\'mins\',this.value)" style="width:100%;font-size:12px;padding:6px"></div>';
               ph+='</div>';
               ph+='<div class="flex gap6">';
               ph+='<button onclick="confirmAddPto(\''+w.key+'\')" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:5px 14px;border-radius:6px;background:transparent">\u2713 Add PTO</button>';
@@ -3037,22 +3040,23 @@ function applyHistDayEdit(wk,dk){
 }
 // ── PTO Management ──
 let _addPto=null;
-let _ptoStore={date:'',hours:''};
-function openAddPto(wk){_addPto={wk};_ptoStore={date:'',hours:''};renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
+let _ptoStore={date:'',hours:'',mins:''};
+function openAddPto(wk){_addPto={wk};_ptoStore={date:'',hours:'',mins:''};renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
 function closeAddPto(){_addPto=null;renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
 function ptoFieldStore(k,v){_ptoStore[k]=v;}
 function confirmAddPto(wk){
-  const hrs=parseFloat(_ptoStore.hours)||0;
-  if(hrs<=0)return;
+  const hrs=parseInt(_ptoStore.hours)||0;
+  const mins=parseInt(_ptoStore.mins)||0;
+  if(hrs<=0&&mins<=0)return;
   const dk=_ptoStore.date;
   if(!dk)return;
   const ref=parseLocal(dk);
   const actualWk=localStr(getWeekStart(ref,S.schedule.weekStartDay,S.schedule.weekStartTime));
   if(actualWk!==wk){showToast(false,'Date not in this pay week');return;}
-  const sec=hrs*3600;
+  const sec=hrs*3600+mins*60;
   S.pto={...S.pto,[wk]:{...(S.pto[wk]||{}),[dk]:sec}};
   save('pto');
-  _addPto=null;_ptoStore={date:'',hours:''};
+  _addPto=null;_ptoStore={date:'',hours:'',mins:''};
   renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
 }
 function delPto(wk,dk){
