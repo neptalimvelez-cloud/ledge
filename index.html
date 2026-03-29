@@ -1750,6 +1750,9 @@ function renderNav(){
 // ─── TRACKER ─────────────────────────────────────────────────────────────────
 let _tick; // interval handle
 
+let _prevPayExpanded=false;
+function togglePrevPay(){_prevPayExpanded=!_prevPayExpanded;render();}
+
 function renderTracker(){
   backfillMissedShifts();
   clearInterval(_tick);
@@ -2196,11 +2199,83 @@ function renderTrackerTab(now,rate,ws,wk){
       return`<div style="padding:16px 20px">
         <div class="label">Payday Projector</div>
         <div class="card blue-l">
-          <div class="label2">Previous paycheck — ${prevWkLabel}</div>
-          <div style="font-size:36px;font-weight:bold;color:var(--blu);line-height:1;margin-bottom:12px">${fmt$(prevNet)}</div>
-          <div class="row"><span class="rl">Gross</span><span class="rr">${fmt$(prevGross)}</span></div>
+          <div onclick="togglePrevPay()" style="cursor:pointer">
+            <div class="flex" style="justify-content:space-between;align-items:center">
+              <div class="label2" style="margin:0">Previous paycheck — ${prevWkLabel}</div>
+              <span style="font-size:10px;color:var(--mut)">${_prevPayExpanded?'▲':'▼'}</span>
+            </div>
+            <div style="font-size:36px;font-weight:bold;color:var(--blu);line-height:1;margin:8px 0 12px">${fmt$(prevNet)}</div>
+          </div>
+          ${_prevPayExpanded?(()=>{
+            let bd='';
+            // Day-by-day breakdown
+            const prevDays=Object.entries(prevDm).sort((a,b)=>a[0].localeCompare(b[0]));
+            let totalRegSec=0,totalOtSec=0,totalBrkSec=0;
+            const otAfter=(parseFloat(oa)||Infinity)*3600;
+            if(prevDays.length){
+              bd+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bdr)">';
+              bd+='<div style="font-size:8px;color:var(--mut);letter-spacing:2px;margin-bottom:6px">DAILY HOURS</div>';
+              let cumSec=0;
+              for(const[pdk,psec]of prevDays){
+                const pdd=parseLocal(pdk);
+                const brks=(S.breakLog[prevWk]&&S.breakLog[prevWk][pdk])||[];
+                const brkSec=brks.reduce((s,b)=>s+b.sec,0);
+                totalBrkSec+=brkSec;
+                const grossH=((psec+brkSec)/3600).toFixed(2);
+                const netH=(psec/3600).toFixed(2);
+                let dayOt=0,dayReg=psec;
+                if(otMode==='shift'){
+                  dayOt=Math.max(0,psec-otAfter);
+                  dayReg=Math.min(psec,otAfter);
+                }else{
+                  const prevCum=cumSec;
+                  cumSec+=psec;
+                  if(cumSec>otAfter){dayOt=Math.max(0,cumSec-Math.max(prevCum,otAfter));dayReg=psec-dayOt;}
+                }
+                totalRegSec+=dayReg;totalOtSec+=dayOt;
+                bd+='<div class="flex" style="justify-content:space-between;padding:4px 0;font-size:10px">';
+                bd+='<span style="color:var(--txt)">'+DAYS[pdd.getDay()]+' <span style="color:var(--mut)">'+pdk+'</span></span>';
+                bd+='<span style="color:var(--txt)">'+netH+'h';
+                if(dayOt>0)bd+=' <span style="color:var(--org)">(+'+(dayOt/3600).toFixed(1)+'h OT)</span>';
+                if(brkSec>0)bd+=' <span style="color:var(--mut)">'+Math.round(brkSec/60)+'m brk</span>';
+                bd+='</span></div>';
+              }
+              bd+='</div>';
+            }
+            // Summary rows
+            const totalWorkedSec=Object.values(prevDm).reduce((s,v)=>s+v,0);
+            bd+='<div style="margin-bottom:10px">';
+            bd+='<div style="font-size:8px;color:var(--mut);letter-spacing:2px;margin-bottom:6px">EARNINGS BREAKDOWN</div>';
+            bd+='<div class="row"><span class="rl">Regular hours</span><span class="rr">'+(totalRegSec/3600).toFixed(1)+'h → '+fmt$(calcEarnings(Math.min(totalWorkedSec,otAfter),rate,Infinity,om))+'</span></div>';
+            if(totalOtSec>0){
+              bd+='<div class="row"><span class="rl">Overtime <span style="color:var(--org)">('+om+'×)</span></span><span class="rr" style="color:var(--org)">'+(totalOtSec/3600).toFixed(1)+'h → '+fmt$(calcEarnings(totalWorkedSec,rate,oa,om)-calcEarnings(Math.min(totalWorkedSec,otAfter),rate,Infinity,om))+'</span></div>';
+            }
+            // PTO
+            const prevPto=S.pto[prevWk]||{};
+            const ptoEntries=Object.entries(prevPto);
+            if(ptoEntries.length){
+              const ptoSec=ptoEntries.reduce((s,[,v])=>s+v,0);
+              const ptoEarn=(ptoSec/3600)*rate;
+              bd+='<div class="row"><span class="rl" style="color:var(--blu)">☂ PTO</span><span class="rr" style="color:var(--blu)">'+(ptoSec/3600).toFixed(1)+'h → '+fmt$(ptoEarn)+'</span></div>';
+            }
+            // Custom shifts
+            if(prevCsG>0){
+              const csList=csInWeek(prevWk);
+              bd+='<div class="row"><span class="rl" style="color:var(--pur)">Custom shifts ('+csList.length+')</span><span class="rr" style="color:var(--pur)">'+fmt$(prevCsG)+'</span></div>';
+            }
+            // Breaks total
+            if(totalBrkSec>0){
+              bd+='<div class="row"><span class="rl">Total breaks</span><span class="rr" style="color:var(--org)">'+fmtTime(totalBrkSec)+'</span></div>';
+            }
+            bd+='</div>';
+            // Gross/Ded/Net
+            bd+='<div class="row"><span class="rl">Gross</span><span class="rr">'+fmt$(prevGross)+'</span></div>';
+            bd+='<div class="row"><span class="rl">Deductions</span><span class="rr" style="color:var(--red)">−'+fmt$(prevGross-prevNet)+'</span></div>';
+            bd+='<div class="row bold"><span class="rl">Projected Net</span><span class="rr" style="color:var(--blu)">'+fmt$(prevNet)+'</span></div>';
+            return bd;
+          })():`<div class="row"><span class="rl">Gross</span><span class="rr">${fmt$(prevGross)}</span></div>
           <div class="row"><span class="rl">Deductions</span><span class="rr" style="color:var(--red)">−${fmt$(prevGross-prevNet)}</span></div>
-          <div class="row bold"><span class="rl">Projected Net</span><span class="rr" style="color:var(--blu)">${fmt$(prevNet)}</span></div>
+          <div class="row bold"><span class="rl">Projected Net</span><span class="rr" style="color:var(--blu)">${fmt$(prevNet)}</span></div>`}
           <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)">
             <div class="label2">Actual paycheck received (for ${prevWkLabel})</div>
             <div class="flex gap8 mb6">
