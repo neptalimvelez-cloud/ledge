@@ -2734,10 +2734,10 @@ function renderHistoryTab(rate){
             h+='<div style="font-size:9px;color:var(--mut);margin-bottom:6px">Times locked while shift is active</div>';
           }else{
           h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:6px">';
-          h+='<input type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
+          h+='<input id="hdt-start-'+dk+'" type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
           h+='<span style="font-size:10px;color:var(--mut)">→</span>';
-          h+='<input type="time" value="'+(pendingEnd?pendingEnd.v:shEnd)+'" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift end">';
-          h+='<span id="hde-apply-'+dk+'" style="opacity:'+(pendingEnd?'1':'0.3')+';transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:4px 10px;border-radius:6px;background:transparent;min-height:32px" title="Apply">✓ Apply</button></span>';
+          h+='<input id="hdt-end-'+dk+'" type="time" value="'+(pendingEnd?pendingEnd.v:shEnd)+'" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift end">';
+          h+='<span id="hde-apply-'+dk+'"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:4px 10px;border-radius:6px;background:transparent;min-height:32px" title="Apply">✓ Apply</button></span>';
           h+='</div>';
           }
           h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">';
@@ -2997,24 +2997,12 @@ function editHistDayEndStore(wk,dk,v){
   if(btn)btn.style.opacity='1';
 }
 function applyHistDayEdit(wk,dk){
-  const pending=_hdtEnd[dk];
-  const startVal=_hdtStart[dk];
-  if(!startVal)return;
-  // If end time wasn't edited, derive it from current log data + start time
-  let endVal;
-  if(pending){
-    endVal=pending.v;
-  }else{
-    // Derive current end from existing net seconds + breaks + start
-    const curSec=(S.log[wk]&&S.log[wk][dk])||0;
-    const breaks=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
-    const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
-    const grossSec=curSec+breakSec;
-    const startMin=toMin(startVal);
-    const endMin=(startMin+Math.round(grossSec/60))%1440;
-    endVal=String(Math.floor(endMin/60)).padStart(2,'0')+':'+String(endMin%60).padStart(2,'0');
-  }
-  if(!endVal)return;
+  // Read current values directly from DOM inputs (onchange may not have fired on iOS)
+  const startEl=document.getElementById('hdt-start-'+dk);
+  const endEl=document.getElementById('hdt-end-'+dk);
+  const startVal=startEl?startEl.value:_hdtStart[dk];
+  const endVal=endEl?endEl.value:(_hdtEnd[dk]?_hdtEnd[dk].v:null);
+  if(!startVal||!endVal)return;
   const sm=toMin(startVal),em=toMin(endVal);
   const grossSec=(em<sm?em+1440-sm:em-sm)*60;
   if(grossSec<=0)return;
@@ -3022,7 +3010,6 @@ function applyHistDayEdit(wk,dk){
   const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
   const netSec=Math.max(0,grossSec-breakSec);
   S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
-  // Persist the start time so it survives re-render
   S.shiftTimes={...S.shiftTimes,[wk]:{...(S.shiftTimes[wk]||{}),[dk]:startVal}};
   save('shiftTimes');
   save('log');
