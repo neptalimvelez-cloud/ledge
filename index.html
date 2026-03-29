@@ -2089,14 +2089,16 @@ function renderTrackerTab(now,rate,ws,wk){
           :'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%);';
       }
     }
-    return`<div class="day-row" ${isLive?'id="live-day-row" ':''}style="opacity:${sh.active||prevLiveSpill?1:.28};${dayBg}${isLive||prevLiveSpill?'border-radius:4px;':''}">
+    const hasSpill=prevLiveSpill||(prevOvernight2&&prevSec2>0&&prevEPct2);
+    return`<div class="day-row" ${isLive?'id="live-day-row" ':''}style="opacity:${sh.active||hasSpill?1:.28};${dayBg}${isLive||prevLiveSpill?'border-radius:4px;':''}">
       <div class="flex" style="align-items:center;gap:10px">
-        <span class="day-dot${isLive?(onBreakNow?' on-break':' live'):prevLiveSpill?' live':sec>0?' done':''}"></span>
-        <span style="font-size:12px;width:28px;color:${isLive||prevLiveSpill?'var(--txt)':'var(--mut)'};font-weight:${isLive||prevLiveSpill?'bold':'normal'}">${DAYS[dow]}</span>
+        <span class="day-dot${isLive?(onBreakNow?' on-break':' live'):prevLiveSpill?' live':sec>0||hasSpill?' done':''}"></span>
+        <span style="font-size:12px;width:28px;color:${isLive||prevLiveSpill?'var(--txt)':hasSpill?'var(--txt)':'var(--mut)'};font-weight:${isLive||prevLiveSpill?'bold':'normal'}">${DAYS[dow]}</span>
         ${sh.active?`<span style="font-size:8px;color:var(--mut2);letter-spacing:1px">${sh.start}–${sh.end}</span>`:''}
         ${prevLiveSpill?`<span style="font-size:8px;color:var(--grn);letter-spacing:1px">← overnight</span>`:''}
+        ${!prevLiveSpill&&hasSpill&&!sh.active?`<span style="font-size:8px;color:var(--mut);letter-spacing:1px">← overnight</span>`:''}
       </div>
-      <span style="font-size:14px;color:${isLive?(onBreakNow?'var(--org)':(ot.inOT?'var(--org)':'var(--grn)')):(sec>0||prevLiveSpill?'var(--txt)':'var(--mut2)')};font-weight:${isLive||prevLiveSpill?'bold':'normal'}">
+      <span style="font-size:14px;color:${isLive?(onBreakNow?'var(--org)':(ot.inOT?'var(--org)':'var(--grn)')):(sec>0||hasSpill?'var(--txt)':'var(--mut2)')};font-weight:${isLive||prevLiveSpill?'bold':'normal'}">
         ${sh.active?(otMode==='shift'?fmt$(dayE||0):`${(sec/3600).toFixed(1)}h`):'—'}
       </span>
     </div>`;
