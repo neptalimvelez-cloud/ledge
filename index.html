@@ -2034,11 +2034,11 @@ function renderTrackerTab(now,rate,ws,wk){
     const prevDk2=dayKey(prevDd2);
     // Check current week first, then previous week for cross-week overnight spill
     let prevSec2=thisWk[prevDk2]||0;
-    if(!prevSec2&&i===0){
-      // First day of week: previous day is in the prior pay week
+    if(!prevSec2){
+      // Previous day might be in a different pay week
       const prevWs2=getWeekStart(prevDd2,S.schedule.weekStartDay,S.schedule.weekStartTime);
       const prevWk2=localStr(prevWs2);
-      prevSec2=(S.log[prevWk2]&&S.log[prevWk2][prevDk2])||0;
+      if(prevWk2!==wk) prevSec2=(S.log[prevWk2]&&S.log[prevWk2][prevDk2])||0;
     }
     let dayBg='';
     if(sec>0&&!isLive){
@@ -2051,8 +2051,18 @@ function renderTrackerTab(now,rate,ws,wk){
       }
     }
     // Spill from previous day's overnight shift into this day (0% to prevEPct2)
-    if(prevOvernight2&&prevSec2>0&&!isLive&&prevEPct2){
-      if(sec>0){
+    // Also detect live overnight spill: previous day's shift is currently active and overnight
+    const prevLiveSpill=!isLive&&shift&&shift.dow===prevDow2&&prevOvernight2;
+    if(prevOvernight2&&(prevSec2>0||prevLiveSpill)&&!isLive&&prevEPct2){
+      if(prevLiveSpill){
+        // Live spill: show animated gradient from midnight to current time (or shift end)
+        const nowMin2=now.getHours()*60+now.getMinutes();
+        const nowPct2=(nowMin2/1440*100).toFixed(1);
+        const onBrk2=p.onBreak;
+        dayBg=onBrk2
+          ?'background:linear-gradient(180deg,'+grnS+'0.18) 0%,'+grnS+'0.12) '+nowPct2+'%,'+orgS+'0.15) '+nowPct2+'%,'+orgS+'0.06) '+prevEPct2+'%,transparent '+prevEPct2+'%);'
+          :'background:linear-gradient(180deg,'+grnS+'0.2) 0%,'+grnS+'0.1) '+nowPct2+'%,transparent '+nowPct2+'%);';
+      }else if(sec>0){
         // Both spill and own shift: combine
         if(overnight){
           dayBg='background:linear-gradient(180deg,'+grnS+'0.15) 0%,'+grnS+'0.08) '+prevEPct2+'%,transparent '+prevEPct2+'%,transparent '+sPct+'%,'+grnS+'0.15) '+sPct+'%,'+grnS+'0.08) 100%);';
@@ -2079,13 +2089,14 @@ function renderTrackerTab(now,rate,ws,wk){
           :'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%);';
       }
     }
-    return`<div class="day-row" ${isLive?'id="live-day-row" ':''}style="opacity:${sh.active?1:.28};${dayBg}${isLive?'border-radius:4px;':''}">
+    return`<div class="day-row" ${isLive?'id="live-day-row" ':''}style="opacity:${sh.active||prevLiveSpill?1:.28};${dayBg}${isLive||prevLiveSpill?'border-radius:4px;':''}">
       <div class="flex" style="align-items:center;gap:10px">
-        <span class="day-dot${isLive?(onBreakNow?' on-break':' live'):sec>0?' done':''}"></span>
-        <span style="font-size:12px;width:28px;color:${isLive?'var(--txt)':'var(--mut)'};font-weight:${isLive?'bold':'normal'}">${DAYS[dow]}</span>
+        <span class="day-dot${isLive?(onBreakNow?' on-break':' live'):prevLiveSpill?' live':sec>0?' done':''}"></span>
+        <span style="font-size:12px;width:28px;color:${isLive||prevLiveSpill?'var(--txt)':'var(--mut)'};font-weight:${isLive||prevLiveSpill?'bold':'normal'}">${DAYS[dow]}</span>
         ${sh.active?`<span style="font-size:8px;color:var(--mut2);letter-spacing:1px">${sh.start}–${sh.end}</span>`:''}
+        ${prevLiveSpill?`<span style="font-size:8px;color:var(--grn);letter-spacing:1px">← overnight</span>`:''}
       </div>
-      <span style="font-size:14px;color:${isLive?(onBreakNow?'var(--org)':(ot.inOT?'var(--org)':'var(--grn)')):(sec>0?'var(--txt)':'var(--mut2)')};font-weight:${isLive?'bold':'normal'}">
+      <span style="font-size:14px;color:${isLive?(onBreakNow?'var(--org)':(ot.inOT?'var(--org)':'var(--grn)')):(sec>0||prevLiveSpill?'var(--txt)':'var(--mut2)')};font-weight:${isLive||prevLiveSpill?'bold':'normal'}">
         ${sh.active?(otMode==='shift'?fmt$(dayE||0):`${(sec/3600).toFixed(1)}h`):'—'}
       </span>
     </div>`;
