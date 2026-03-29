@@ -1075,6 +1075,7 @@ let S={
   pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]},
   breakLog:{},
   pto:{},
+  shiftTimes:{},
 };
 
 function loadState(){
@@ -1109,6 +1110,7 @@ function loadState(){
   if(acr)S.autoCatRules=acr;
   if(bkl)S.breakLog=bkl;
   const ptoData=lsGet('pto_v1');if(ptoData)S.pto=ptoData;
+  const stData=lsGet('shift_times_v1');if(stData)S.shiftTimes=stData;
   const edd=lsGet('early_deposit_v1');if(edd!=null)S.earlyDepositDays=edd;
   const thm=lsGet('theme_v1');if(thm)S.theme=thm;
   const wiz=lsGet('wizard_seen_v1');if(wiz)S.wizardSeen=wiz;
@@ -1158,7 +1160,8 @@ function save(key){
     achievements:'achievements_v1',
     accentColor:'accent_color_v1',
     breakLog:'break_log_v1',
-    pto:'pto_v1'
+    pto:'pto_v1',
+    shiftTimes:'shift_times_v1'
   };
   lsSet(map[key],S[key]);
   showToast(false);
@@ -2694,7 +2697,8 @@ function renderHistoryTab(rate){
           const grossSec=sec+breakSec;
           const dg=calcEarnings(sec,rate,oa,om);
           const sh=S.schedule.shifts[dd.getDay()];
-          const shStart=sh?.start||'';
+          const savedStart=(S.shiftTimes[w.key]&&S.shiftTimes[w.key][dk])||'';
+          const shStart=savedStart||sh?.start||'';
           // Derive end time from scheduled start + gross seconds (net + breaks)
           let shEnd='';
           if(shStart&&grossSec>0){
@@ -2987,6 +2991,9 @@ function applyHistDayEdit(wk,dk){
   const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
   const netSec=Math.max(0,grossSec-breakSec);
   S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
+  // Persist the start time so it survives re-render
+  S.shiftTimes={...S.shiftTimes,[wk]:{...(S.shiftTimes[wk]||{}),[dk]:startVal}};
+  save('shiftTimes');
   save('log');
   delete _hdtEnd[dk];
   delete _hdtStart[dk];
@@ -3034,6 +3041,12 @@ function delHistDay(wk,dk){
     const wkBl={...S.breakLog[wk]};delete wkBl[dk];
     S.breakLog={...S.breakLog,[wk]:wkBl};
     save('breakLog');
+  }
+  if(S.shiftTimes[wk]&&S.shiftTimes[wk][dk]){
+    const wkSt={...S.shiftTimes[wk]};delete wkSt[dk];
+    if(Object.keys(wkSt).length)S.shiftTimes={...S.shiftTimes,[wk]:wkSt};
+    else{const st={...S.shiftTimes};delete st[wk];S.shiftTimes=st;}
+    save('shiftTimes');
   }
   save('log');render();
 }
@@ -6176,7 +6189,7 @@ function clearAllDataConfirmed(){
     'tax_rate_v1','pin_v1','snapshots_v1','milestones_v1','ret401k_v1','side_income_v1',
     'savings_challenge_v1','transactions_v1','early_deposit_v1','income_thresholds_v1',
     'auto_cat_rules_v1','wizard_seen_v1','achievements_v1','theme_v1','accent_color_v1',
-    'break_log_v1','pto_v1','__activeApp__'];
+    'break_log_v1','pto_v1','shift_times_v1','__activeApp__'];
   keys.forEach(k=>localStorage.removeItem(k));
   // Reset state to defaults
   S={
@@ -6194,6 +6207,7 @@ function clearAllDataConfirmed(){
     pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]},
     breakLog:{},
     pto:{},
+    shiftTimes:{},
   };
   applyTheme();
   closeDataPanel();
@@ -6210,6 +6224,7 @@ function exportJSON(){
     theme:S.theme,accentColor:S.accentColor,achievements:S.achievements,
     breakLog:S.breakLog,
     pto:S.pto,
+    shiftTimes:S.shiftTimes,
     exportedAt:new Date().toISOString()};
   const json=JSON.stringify(bundle,null,2);
   if(navigator.clipboard)navigator.clipboard.writeText(json).catch(()=>{});
@@ -6273,6 +6288,7 @@ function importJSON(){
     if(bundle.accentColor!=null){S.accentColor=bundle.accentColor;lsSet('accent_color_v1',S.accentColor);}
     if(bundle.breakLog){S.breakLog=bundle.breakLog;lsSet('break_log_v1',S.breakLog);}
     if(bundle.pto){S.pto=bundle.pto;lsSet('pto_v1',S.pto);}
+    if(bundle.shiftTimes){S.shiftTimes=bundle.shiftTimes;lsSet('shift_times_v1',S.shiftTimes);}
     applyTheme();
     showToast(true);closeDataPanel();render();
   }catch(e){const ti=document.getElementById('save-toast'),mi=document.getElementById('toast-msg');if(ti&&mi){ti.classList.remove('manual');ti.classList.add('manual');mi.textContent='Import failed — invalid JSON';ti.classList.add('show');setTimeout(()=>ti.classList.remove('show'),4000);}}
