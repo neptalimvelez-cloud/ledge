@@ -1074,6 +1074,7 @@ let S={
   achievements:{},
   pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]},
   breakLog:{},
+  pto:{},
 };
 
 function loadState(){
@@ -1107,6 +1108,7 @@ function loadState(){
   if(ist)S.incomeSafetyThresholds={...S.incomeSafetyThresholds,...ist};
   if(acr)S.autoCatRules=acr;
   if(bkl)S.breakLog=bkl;
+  const ptoData=lsGet('pto_v1');if(ptoData)S.pto=ptoData;
   const edd=lsGet('early_deposit_v1');if(edd!=null)S.earlyDepositDays=edd;
   const thm=lsGet('theme_v1');if(thm)S.theme=thm;
   const wiz=lsGet('wizard_seen_v1');if(wiz)S.wizardSeen=wiz;
@@ -1116,7 +1118,12 @@ function loadState(){
     const today=dayKey(new Date());
     const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
     const yestKey=dayKey(yesterday);
-    if(ps.dayKey===today||ps.dayKey===yestKey)S.pause={...ps,breakLog:ps.breakLog||[]};
+    if(ps.dayKey===today){
+      S.pause={...ps,breakLog:ps.breakLog||[]};
+    }else if(ps.dayKey===yestKey){
+      // Yesterday's pause: keep paused state but clear break log (already committed or stale)
+      S.pause={...ps,breakLog:[],accBreakSec:0,onBreak:false,breakStart:null};
+    }
   }
   // On load: remove log entries only for the specific dates covered by custom shifts
   let logChanged=false;
@@ -1150,7 +1157,8 @@ function save(key){
     wizardSeen:'wizard_seen_v1',
     achievements:'achievements_v1',
     accentColor:'accent_color_v1',
-    breakLog:'break_log_v1'
+    breakLog:'break_log_v1',
+    pto:'pto_v1'
   };
   lsSet(map[key],S[key]);
   showToast(false);
@@ -1279,17 +1287,19 @@ function getLiveEarned(){
   if(otMode==='week')return calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
   return calcEarnings(netSec,rate,oa,om);
 }
-function weekGross(dayMap,skipDk,liveSec,rate,otA,otM,otMode,csGrossAmt,coveredDays){
+function weekGross(dayMap,skipDk,liveSec,rate,otA,otM,otMode,csGrossAmt,coveredDays,ptoMap){
   // coveredDays: Set of dayKey strings replaced by custom shifts (no double-count)
   const extra=csGrossAmt||0;
   const covered=coveredDays||new Set();
+  const pto=ptoMap||{};
+  const ptoEarn=Object.values(pto).reduce((s,sec)=>s+(sec/3600)*rate,0);
   const effLive=covered.has(skipDk)?0:liveSec;
   function filteredMap(){return Object.fromEntries(Object.entries(dayMap).filter(([k])=>k!==skipDk&&!covered.has(k)));}
   if(otMode==='week'){
     const s=Object.values(filteredMap()).reduce((a,b)=>a+b,0);
-    return calcEarnings(s+effLive,rate,otA,otM)+extra;
+    return calcEarnings(s+effLive,rate,otA,otM)+extra+ptoEarn;
   }
-  let t=extra;
+  let t=extra+ptoEarn;
   for(const[k,v]of Object.entries(filteredMap()))t+=calcEarnings(v,rate,otA,otM);
   return t+calcEarnings(effLive,rate,otA,otM);
 }
@@ -1916,7 +1926,7 @@ function renderTrackerTab(now,rate,ws,wk){
     {inOT:netSec/3600>(parseFloat(oa)||Infinity),otHours:Math.max(0,netSec/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)};
 
   const totalNetSec=priorSec+(shift?netSec:(thisWk[todayDk]||0));
-  const wGross=weekGross(thisWk,todayDk,shift?netSec:(thisWk[todayDk]||0),rate,oa,om,otMode,thisCsG,coveredDays);
+  const wGross=weekGross(thisWk,todayDk,shift?netSec:(thisWk[todayDk]||0),rate,oa,om,otMode,thisCsG,coveredDays,S.pto[wk]);
   const wDed=wGross-applyDed(wGross,S.deductions);
   const wNet=wGross-wDed;
 
@@ -1937,7 +1947,7 @@ function renderTrackerTab(now,rate,ws,wk){
       }
       // If lm[dk] already has logged hours, keep them (already worked)
     }
-    return{projGross:weekGross(lm,'__x__',0,rate,oa,om,otMode,thisCsG,coveredDays),futSec:fSec};
+    return{projGross:weekGross(lm,'__x__',0,rate,oa,om,otMode,thisCsG,coveredDays,S.pto[wk]),futSec:fSec};
   })();
   const projNet=applyDed(projGross,S.deductions);
   const actualPc=S.paychecks[wk];
@@ -2154,7 +2164,7 @@ function renderTrackerTab(now,rate,ws,wk){
       const prevDm=S.log[prevWk]||{};
       const prevCsG=csInWeek(prevWk).reduce((s,c)=>s+csGross(c),0);
       const prevCov=csCoveredDays(prevWk);
-      const prevGross=weekGross(prevDm,'__x__',0,rate,oa,om,otMode,prevCsG,prevCov);
+      const prevGross=weekGross(prevDm,'__x__',0,rate,oa,om,otMode,prevCsG,prevCov,S.pto[prevWk]);
       const prevNet=applyDed(prevGross,S.deductions);
       const prevPc=S.paychecks[prevWk];
       const prevVariance=prevPc?.amount?(prevPc.amount-prevNet):null;
@@ -2246,7 +2256,7 @@ function renderTrackerTab(now,rate,ws,wk){
       if(pcEntries.length<2)return'';
       const variances=pcEntries.map(([wkS,pc])=>{
         const dm=S.log[wkS]||{};const cg=csInWeek(wkS).reduce((s,c)=>s+csGross(c),0);
-        const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkS));
+        const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkS),S.pto[wkS]);
         const proj=applyDed(g,S.deductions);return{wk:wkS,actual:pc.amount,proj,diff:pc.amount-proj};
       });
       const avgVar=variances.reduce((s,v)=>s+v.diff,0)/variances.length;
@@ -2319,6 +2329,8 @@ function saveQuickTx(){
 function commitBreakLog(wk,dk){
   const bl=S.pause.breakLog||[];
   if(!bl.length)return;
+  // Only commit breaks if they belong to this day (prevent cross-day phantom breaks)
+  if(S.pause.dayKey&&S.pause.dayKey!==dk)return;
   const existing=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
   const ids=new Set(existing.map(b=>b.id));
   const merged=[...existing,...bl.filter(b=>!ids.has(b.id))];
@@ -2444,7 +2456,7 @@ function autoLogCheck(){
     const sm=toMin(sh.start),em=toMin(sh.end),overnight=em<sm;
     if(overnight){
       const endMin=now.getHours()*60+now.getMinutes();
-      if(now.getDay()===((dow+1)%7)&&endMin>=em&&endMin<em+3){
+      if(now.getDay()===((dow+1)%7)&&endMin>=em&&endMin<em+15){
         const sd=new Date(now);sd.setDate(sd.getDate()-1);
         if(sd.getDay()===dow){
           const ws=getWeekStart(sd,sch.weekStartDay,sch.weekStartTime);
@@ -2465,7 +2477,7 @@ function autoLogCheck(){
     } else {
       if(now.getDay()===dow){
         const nowMin=now.getHours()*60+now.getMinutes();
-        if(nowMin>=em&&nowMin<em+3){
+        if(nowMin>=em&&nowMin<em+15){
           const ws=getWeekStart(now,sch.weekStartDay,sch.weekStartTime);
           const wk=localStr(ws),dk=dayKey(now);
           if(!(S.log[wk]&&S.log[wk][dk])){
@@ -2526,6 +2538,12 @@ function backfillMissedShifts(){
     const existingSec=S.log[wk]&&S.log[wk][dk];
     if(existingSec&&existingSec>=netFullSec)continue;
     S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netFullSec}};
+    // Commit any pending pause breaks for this day into persistent breakLog
+    if(_pbl.length){
+      const merged=[..._cbl,..._pbl];
+      S.breakLog={...S.breakLog,[wk]:{...(S.breakLog[wk]||{}),[dk]:merged}};
+      lsSet('break_log_v1',S.breakLog);
+    }
     changed=true;
   }
   if(changed){lsSet('log_v3',S.log);}
@@ -2596,7 +2614,7 @@ function renderHistoryTab(rate){
   const logWks=Object.entries(S.log).map(([wk,dm])=>{
     const sec=Object.values(dm).reduce((a,b)=>a+b,0);
     const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
-    return{key:wk,totalSec:sec,gross:weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wk))};
+    return{key:wk,totalSec:sec,gross:weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wk),S.pto[wk])};
   });
   // Add weeks that only have custom shifts (no log entry exists for that week)
   const logWkKeys=new Set(logWks.map(w=>w.key));
@@ -2604,7 +2622,8 @@ function renderHistoryTab(rate){
     const wk=localStr(getWeekStart(parseLocal(cs.date),S.schedule.weekStartDay,S.schedule.weekStartTime));
     if(!logWkKeys.has(wk)){
       const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
-      logWks.push({key:wk,totalSec:0,gross:cg});
+      const _ptoG=S.pto[wk]?Object.values(S.pto[wk]).reduce((s,sec)=>s+(sec/3600)*rate,0):0;
+      logWks.push({key:wk,totalSec:0,gross:cg+_ptoG});
       logWkKeys.add(wk);
     }
   }
@@ -2687,24 +2706,30 @@ function renderHistoryTab(rate){
           if(shStart)_hdtStart[dk]=shStart;
           const pendingEnd=_hdtEnd[dk];
           let h='';
-          h+='<div style="padding:8px 0;border-bottom:1px solid var(--bdr)">';
-          h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:4px">';
-          h+='<span style="font-size:11px;color:var(--mut);width:28px">'+DAYS[dd.getDay()]+'</span>';
-          h+='<span style="font-size:10px;color:var(--mut);width:66px">'+dk+'</span>';
-          h+='<input type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift start">';
-          h+='<span style="font-size:9px;color:var(--mut)">→</span>';
-          h+='<input type="time" value="'+(pendingEnd?pendingEnd.v:shEnd)+'" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:11px;padding:3px 4px" title="Shift end">';
-          h+='<span id="hde-apply-'+dk+'" style="opacity:'+(pendingEnd?'1':'0.3')+';transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:9px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:2px 8px;border-radius:4px;background:transparent" title="Apply">✓</button></span>';
-          h+='<span style="font-size:12px;color:var(--txt);font-weight:bold;min-width:46px;text-align:right">'+fmt$(dg)+'</span>';
+          h+='<div style="padding:10px 0;border-bottom:1px solid var(--bdr)">';
+          h+='<div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:6px">';
+          h+='<div class="flex" style="align-items:baseline;gap:6px">';
+          h+='<span style="font-size:12px;font-weight:600;color:var(--txt)">'+DAYS[dd.getDay()]+'</span>';
+          h+='<span style="font-size:10px;color:var(--mut)">'+dk+'</span>';
+          h+='</div>';
+          h+='<div class="flex" style="align-items:center;gap:8px">';
+          h+='<span style="font-size:14px;color:var(--acc);font-weight:bold">'+fmt$(dg)+'</span>';
           h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';
           h+='</div>';
-          h+='<div style="font-size:9px;color:var(--mut);padding-left:100px">';
-          h+=(grossSec/3600).toFixed(2)+'h gross';
-          if(breakSec>0)h+=' &minus; <span style="color:var(--org)">'+fmtTime(breakSec)+' breaks</span> = <span style="color:var(--grn)">'+(sec/3600).toFixed(2)+'h net</span>';
-          else h+=' = <span style="color:var(--grn)">'+(sec/3600).toFixed(2)+'h net</span>';
+          h+='</div>';
+          h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:6px">';
+          h+='<input type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
+          h+='<span style="font-size:10px;color:var(--mut)">→</span>';
+          h+='<input type="time" value="'+(pendingEnd?pendingEnd.v:shEnd)+'" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift end">';
+          h+='<span id="hde-apply-'+dk+'" style="opacity:'+(pendingEnd?'1':'0.3')+';transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:4px 10px;border-radius:6px;background:transparent;min-height:32px" title="Apply">✓ Apply</button></span>';
+          h+='</div>';
+          h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">';
+          h+='<span>'+(grossSec/3600).toFixed(2)+'h gross</span>';
+          if(breakSec>0)h+=' &minus; <span style="color:var(--org)">'+fmtTime(breakSec)+' breaks</span> = <span style="color:var(--grn);font-weight:600">'+(sec/3600).toFixed(2)+'h net</span>';
+          else h+=' = <span style="color:var(--grn);font-weight:600">'+(sec/3600).toFixed(2)+'h net</span>';
           h+='</div>';
           if(breaks.length){
-            h+='<div style="padding-left:100px;margin-top:4px">';
+            h+='<div style="margin-top:6px">';
             for(const b of breaks){
               const mins=Math.round(b.sec/60);
               const lbl=b.label||(b.type==='quick'?mins+'m break':'Break');
@@ -2716,7 +2741,7 @@ function renderHistoryTab(rate){
             h+='</div>';
           }
           const isAddBrkOpen=_addBreak&&_addBreak.wk===w.key&&_addBreak.dk===dk;
-          h+='<div style="padding-left:100px;margin-top:5px">';
+          h+='<div style="margin-top:6px">';
           if(isAddBrkOpen){
             h+='<div class="flex" style="align-items:center;gap:5px;flex-wrap:wrap">';
             h+='<input id="add-brk-min-'+dk+'" type="number" inputmode="numeric" min="1" step="1" placeholder="min" style="width:52px;font-size:11px;padding:3px 5px">';
@@ -2741,6 +2766,7 @@ function renderHistoryTab(rate){
               <span class="mut">Gross <span style="color:var(--txt)">${fmt$(w.gross)}</span></span>
               ${ded>0?`<span class="mut">Ded <span style="color:var(--red)">−${fmt$(ded)}</span></span>`:''}
               ${cg>0?`<span class="mut">Custom <span style="color:var(--pur)">${fmt$(cg)}</span></span>`:''}
+              ${(()=>{const wp=S.pto[w.key];if(!wp)return'';const pt=Object.values(wp).reduce((s,sec)=>s+(sec/3600)*(parseFloat(S.schedule.hourlyRate)||0),0);return pt>0?'<span class="mut">PTO <span style="color:var(--blu)">'+fmt$(pt)+'</span></span>':'';})()}
               ${pc?.amount?`<span style="color:${pcDiff>=0?'var(--grn)':'var(--red)'}">Actual ${fmt$(pc.amount)}</span>`:''}
             </div>
           </div>
@@ -2752,6 +2778,53 @@ function renderHistoryTab(rate){
         ${isExp?`<div class="wk-body">
           <div class="label2 mb8">Day Breakdown — set end time to edit hours</div>
           ${dayRows||'<div style="font-size:10px;color:var(--mut2)">No logged shifts</div>'}
+          ${(()=>{
+            const wkPto=S.pto[w.key]||{};
+            const ptoEntries=Object.entries(wkPto).sort((a,b)=>a[0].localeCompare(b[0]));
+            const ptoRate=parseFloat(S.schedule.hourlyRate)||0;
+            const isPtoOpen=_addPto&&_addPto.wk===w.key;
+            let ph='';
+            ph+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--bdr)">';
+            ph+='<div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:6px">';
+            ph+='<div class="label2" style="color:var(--blu);margin:0">\u2602 PTO / Paid Leave</div>';
+            if(!isPtoOpen)ph+='<button onclick="openAddPto(\''+w.key+'\')" style="font-size:9px;color:var(--blu);border:1px solid rgba(120,180,255,0.3);padding:3px 10px;border-radius:6px;background:transparent">+ Add PTO</button>';
+            ph+='</div>';
+            if(ptoEntries.length){
+              for(const [pdk,psec] of ptoEntries){
+                const pdd=parseLocal(pdk);
+                const phrs=psec/3600;
+                const pearn=phrs*ptoRate;
+                ph+='<div class="flex" style="align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr)">';
+                ph+='<div class="flex" style="align-items:baseline;gap:6px">';
+                ph+='<span style="font-size:12px;font-weight:600;color:var(--blu)">'+DAYS[pdd.getDay()]+'</span>';
+                ph+='<span style="font-size:10px;color:var(--mut)">'+pdk+'</span>';
+                ph+='<span style="font-size:10px;color:var(--blu)">'+phrs.toFixed(1)+'h</span>';
+                ph+='</div>';
+                ph+='<div class="flex" style="align-items:center;gap:8px">';
+                ph+='<span style="font-size:13px;font-weight:bold;color:var(--blu)">'+fmt$(pearn)+'</span>';
+                ph+='<button class="btn-sm btn-red" onclick="delPto(\''+w.key+'\',\''+pdk+'\')">\u2715</button>';
+                ph+='</div>';
+                ph+='</div>';
+              }
+            }else if(!isPtoOpen){
+              ph+='<div style="font-size:10px;color:var(--mut2);padding:4px 0">No PTO this week</div>';
+            }
+            if(isPtoOpen){
+              ph+='<div style="margin-top:8px;padding:10px;background:var(--surf2);border-radius:var(--radius-sm)">';
+              ph+='<div class="flex gap8 mb8">';
+              ph+='<div style="flex:1"><div class="label2">Date</div><input type="date" value="'+(_ptoStore.date||'')+'" onchange="ptoFieldStore(\'date\',this.value)" style="width:100%;font-size:12px;padding:6px"></div>';
+              ph+='<div style="width:80px"><div class="label2">Hours</div><input type="number" min="0" step="0.5" placeholder="8" value="'+(_ptoStore.hours||'')+'" inputmode="decimal" oninput="ptoFieldStore(\'hours\',this.value)" style="width:100%;font-size:12px;padding:6px"></div>';
+              ph+='</div>';
+              ph+='<div class="flex gap6">';
+              ph+='<button onclick="confirmAddPto(\''+w.key+'\')" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:5px 14px;border-radius:6px;background:transparent">\u2713 Add PTO</button>';
+              ph+='<button onclick="closeAddPto()" style="font-size:10px;color:var(--mut);border:1px solid var(--bdr);padding:5px 14px;border-radius:6px;background:transparent">Cancel</button>';
+              ph+='</div>';
+              ph+='<div style="font-size:8px;color:var(--mut);margin-top:6px">PTO earns at base rate ($'+(ptoRate.toFixed(2))+'/hr) without counting toward overtime</div>';
+              ph+='</div>';
+            }
+            ph+='</div>';
+            return ph;
+          })()}
           <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--bdr)">
             <div class="label2 mb6">Actual Paycheck (net)</div>
             <div class="flex gap8 mb6">
@@ -2853,7 +2926,7 @@ function showPayStub(wkStr){
   const oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
   const dm=S.log[wkStr]||{};
   const cg=csInWeek(wkStr).reduce((s,c)=>s+csGross(c),0);
-  const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkStr));
+  const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkStr),S.pto[wkStr]);
   const ded=S.deductions;
   const d=parseLocal(wkStr);
   const we=wkEnd(parseLocal(wkStr));
@@ -2919,6 +2992,35 @@ function applyHistDayEdit(wk,dk){
   delete _hdtStart[dk];
   renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
 }
+// ── PTO Management ──
+let _addPto=null;
+let _ptoStore={date:'',hours:''};
+function openAddPto(wk){_addPto={wk};_ptoStore={date:'',hours:''};renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
+function closeAddPto(){_addPto=null;renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);}
+function ptoFieldStore(k,v){_ptoStore[k]=v;}
+function confirmAddPto(wk){
+  const hrs=parseFloat(_ptoStore.hours)||0;
+  if(hrs<=0)return;
+  const dk=_ptoStore.date;
+  if(!dk)return;
+  const ref=parseLocal(dk);
+  const actualWk=localStr(getWeekStart(ref,S.schedule.weekStartDay,S.schedule.weekStartTime));
+  if(actualWk!==wk){showToast(false,'Date not in this pay week');return;}
+  const sec=hrs*3600;
+  S.pto={...S.pto,[wk]:{...(S.pto[wk]||{}),[dk]:sec}};
+  save('pto');
+  _addPto=null;_ptoStore={date:'',hours:''};
+  renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
+}
+function delPto(wk,dk){
+  if(S.pto[wk]){
+    const wkPto={...S.pto[wk]};delete wkPto[dk];
+    if(Object.keys(wkPto).length)S.pto={...S.pto,[wk]:wkPto};
+    else{const p={...S.pto};delete p[wk];S.pto=p;}
+    save('pto');renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
+  }
+}
+
 function editHistDay(wk,dk,v){
   const s=(parseFloat(v)||0)*3600;
   if(s<=0){delHistDay(wk,dk);return;}
@@ -3155,7 +3257,7 @@ function renderDeductionsTab(now,rate,ws,wk){
   const brkLive=p.onBreak&&p.breakStart?Math.floor((now-p.breakStart)/1000):0;
   const netSec=Math.max(0,liveSec-(p.accBreakSec+brkLive));
   const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
-  const wG=weekGross(thisWk,todayDk,shift?netSec:(thisWk[todayDk]||0),rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier,S.schedule.overtimeMode,cg,csCoveredDays(wk));
+  const wG=weekGross(thisWk,todayDk,shift?netSec:(thisWk[todayDk]||0),rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier,S.schedule.overtimeMode,cg,csCoveredDays(wk),S.pto[wk]);
   const wN=applyDed(wG,S.deductions);
 
   const dedRows=S.deductions.map(d=>{
@@ -4167,7 +4269,7 @@ function renderBudgetForecastCalOnly(){
         } else {
           const dm=S.log[wsKey]||{};
           const cg=csInWeek(wsKey).reduce((s,c)=>s+csGross(c),0);
-          const gross=weekGross(dm,'__x__',0,rate,_oa,_om,_otMode,cg,csCoveredDays(wsKey));
+          const gross=weekGross(dm,'__x__',0,rate,_oa,_om,_otMode,cg,csCoveredDays(wsKey),S.pto[wsKey]);
           const net=applyDed(gross,S.deductions);
           if(gross>0)paydayAmts[actualPay.getDate()]={amt:net,actual:false};
         }
@@ -4400,7 +4502,7 @@ function renderCalHistory(){
       if(actualPay.getFullYear()===yr&&actualPay.getMonth()===mo){
         const dm=S.log[wsKey]||{};
         const cg=csInWeek(wsKey).reduce((s,c)=>s+csGross(c),0);
-        const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wsKey));
+        const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wsKey),S.pto[wsKey]);
         const net=applyDed(gross,S.deductions);
         const amt=pc?.amount||net;
         events.push({date:localStr(actualPay),day:actualPay.getDate(),label:'Paycheck'+(pc?.amount?' (actual)':' (est)'),amount:amt,cat:'income',source:'paycheck',sub:'weekly'});
@@ -6074,7 +6176,7 @@ function clearAllDataConfirmed(){
     'tax_rate_v1','pin_v1','snapshots_v1','milestones_v1','ret401k_v1','side_income_v1',
     'savings_challenge_v1','transactions_v1','early_deposit_v1','income_thresholds_v1',
     'auto_cat_rules_v1','wizard_seen_v1','achievements_v1','theme_v1','accent_color_v1',
-    'break_log_v1','__activeApp__'];
+    'break_log_v1','pto_v1','__activeApp__'];
   keys.forEach(k=>localStorage.removeItem(k));
   // Reset state to defaults
   S={
@@ -6091,6 +6193,7 @@ function clearAllDataConfirmed(){
     theme:'midnight',accentColor:'',wizardSeen:false,achievements:{},
     pause:{paused:false,pausedAt:null,dayKey:null,accBreakSec:0,onBreak:false,breakStart:null,breakLog:[]},
     breakLog:{},
+    pto:{},
   };
   applyTheme();
   closeDataPanel();
@@ -6106,6 +6209,7 @@ function exportJSON(){
     incomeSafetyThresholds:S.incomeSafetyThresholds,autoCatRules:S.autoCatRules,
     theme:S.theme,accentColor:S.accentColor,achievements:S.achievements,
     breakLog:S.breakLog,
+    pto:S.pto,
     exportedAt:new Date().toISOString()};
   const json=JSON.stringify(bundle,null,2);
   if(navigator.clipboard)navigator.clipboard.writeText(json).catch(()=>{});
@@ -6120,7 +6224,7 @@ function exportCSV(){
     seenWks.add(wk);
     const sec=Object.values(dm).reduce((a,b)=>a+b,0);
     const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
-    const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wk));
+    const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wk),S.pto[wk]);
     const ded=g-applyDed(g,S.deductions),net=g-ded;
     const pc=S.paychecks[wk];
     rows.push([wk,(sec/3600).toFixed(2),g.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
@@ -6168,6 +6272,7 @@ function importJSON(){
     if(bundle.achievements){S.achievements=bundle.achievements;lsSet('achievements_v1',S.achievements);}
     if(bundle.accentColor!=null){S.accentColor=bundle.accentColor;lsSet('accent_color_v1',S.accentColor);}
     if(bundle.breakLog){S.breakLog=bundle.breakLog;lsSet('break_log_v1',S.breakLog);}
+    if(bundle.pto){S.pto=bundle.pto;lsSet('pto_v1',S.pto);}
     applyTheme();
     showToast(true);closeDataPanel();render();
   }catch(e){const ti=document.getElementById('save-toast'),mi=document.getElementById('toast-msg');if(ti&&mi){ti.classList.remove('manual');ti.classList.add('manual');mi.textContent='Import failed — invalid JSON';ti.classList.add('show');setTimeout(()=>ti.classList.remove('show'),4000);}}
