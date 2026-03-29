@@ -2391,6 +2391,8 @@ function handleBreak(){
     S.pause={...p,onBreak:false,breakStart:null,accBreakSec:(p.accBreakSec||0)+elapsed,dayKey:dk,breakLog:log};
   }
   save('pause');
+  // Re-render to show updated break list immediately
+  if(S.app==='tracker'&&S.trackerTab==='tracker')render();
 }
 
 function quickBreak(mins){
@@ -2400,6 +2402,8 @@ function quickBreak(mins){
   const log=[...(S.pause.breakLog||[]),{id:Date.now().toString(),type:'quick',sec:sec,label:mins+'m',time:now}];
   S.pause={...S.pause,accBreakSec:(S.pause.accBreakSec||0)+sec,dayKey:dk,breakLog:log};
   save('pause');
+  // Re-render to show updated break list immediately
+  if(S.app==='tracker'&&S.trackerTab==='tracker')render();
 }
 
 function removeBreak(id){
@@ -2709,24 +2713,33 @@ function renderHistoryTab(rate){
           // Pre-init _hdtStart so editing only end field works without touching start
           if(shStart)_hdtStart[dk]=shStart;
           const pendingEnd=_hdtEnd[dk];
+          // Detect if this is the currently active (live) shift day
+          const _activeShift=getActiveShift(now);
+          const _activeDk=_activeShift?dayKey(_activeShift.date):null;
+          const isLiveDay=_activeDk===dk;
           let h='';
           h+='<div style="padding:10px 0;border-bottom:1px solid var(--bdr)">';
           h+='<div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:6px">';
           h+='<div class="flex" style="align-items:baseline;gap:6px">';
           h+='<span style="font-size:12px;font-weight:600;color:var(--txt)">'+DAYS[dd.getDay()]+'</span>';
           h+='<span style="font-size:10px;color:var(--mut)">'+dk+'</span>';
+          if(isLiveDay)h+='<span style="font-size:8px;color:var(--grn);letter-spacing:1px">LIVE</span>';
           h+='</div>';
           h+='<div class="flex" style="align-items:center;gap:8px">';
           h+='<span style="font-size:14px;color:var(--acc);font-weight:bold">'+fmt$(dg)+'</span>';
           h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';
           h+='</div>';
           h+='</div>';
+          if(isLiveDay){
+            h+='<div style="font-size:9px;color:var(--mut);margin-bottom:6px">Times locked while shift is active</div>';
+          }else{
           h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:6px">';
           h+='<input type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
           h+='<span style="font-size:10px;color:var(--mut)">→</span>';
           h+='<input type="time" value="'+(pendingEnd?pendingEnd.v:shEnd)+'" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift end">';
           h+='<span id="hde-apply-'+dk+'" style="opacity:'+(pendingEnd?'1':'0.3')+';transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:4px 10px;border-radius:6px;background:transparent;min-height:32px" title="Apply">✓ Apply</button></span>';
           h+='</div>';
+          }
           h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">';
           h+='<span>'+(grossSec/3600).toFixed(2)+'h gross</span>';
           if(breakSec>0)h+=' &minus; <span style="color:var(--org)">'+fmtTime(breakSec)+' breaks</span> = <span style="color:var(--grn);font-weight:600">'+(sec/3600).toFixed(2)+'h net</span>';
@@ -2972,7 +2985,12 @@ function toggleWk(k){S.expandedWk=S.expandedWk===k?null:k;render();}
 // Prevents re-render (and iOS time picker dismissal) on every change
 const _hdtStart={};
 const _hdtEnd={};
-function editHistDayStart(wk,dk,v){_hdtStart[dk]=v;}
+function editHistDayStart(wk,dk,v){
+  _hdtStart[dk]=v;
+  // Light up Apply button when start time changes
+  const btn=document.getElementById('hde-apply-'+dk);
+  if(btn)btn.style.opacity='1';
+}
 function editHistDayEndStore(wk,dk,v){
   _hdtEnd[dk]={wk,v};
   const btn=document.getElementById('hde-apply-'+dk);
@@ -2980,10 +2998,23 @@ function editHistDayEndStore(wk,dk,v){
 }
 function applyHistDayEdit(wk,dk){
   const pending=_hdtEnd[dk];
-  if(!pending)return;
-  const endVal=pending.v;
   const startVal=_hdtStart[dk];
-  if(!startVal||!endVal)return;
+  if(!startVal)return;
+  // If end time wasn't edited, derive it from current log data + start time
+  let endVal;
+  if(pending){
+    endVal=pending.v;
+  }else{
+    // Derive current end from existing net seconds + breaks + start
+    const curSec=(S.log[wk]&&S.log[wk][dk])||0;
+    const breaks=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
+    const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
+    const grossSec=curSec+breakSec;
+    const startMin=toMin(startVal);
+    const endMin=(startMin+Math.round(grossSec/60))%1440;
+    endVal=String(Math.floor(endMin/60)).padStart(2,'0')+':'+String(endMin%60).padStart(2,'0');
+  }
+  if(!endVal)return;
   const sm=toMin(startVal),em=toMin(endVal);
   const grossSec=(em<sm?em+1440-sm:em-sm)*60;
   if(grossSec<=0)return;
