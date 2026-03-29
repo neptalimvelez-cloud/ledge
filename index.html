@@ -2032,7 +2032,14 @@ function renderTrackerTab(now,rate,ws,wk){
     const prevEPct2=prevOvernight2?(toMin(prevSh2.end)/1440*100).toFixed(1):null;
     const prevDd2=new Date(dd);prevDd2.setDate(prevDd2.getDate()-1);
     const prevDk2=dayKey(prevDd2);
-    const prevSec2=thisWk[prevDk2]||0;
+    // Check current week first, then previous week for cross-week overnight spill
+    let prevSec2=thisWk[prevDk2]||0;
+    if(!prevSec2&&i===0){
+      // First day of week: previous day is in the prior pay week
+      const prevWs2=getWeekStart(prevDd2,S.schedule.weekStartDay,S.schedule.weekStartTime);
+      const prevWk2=localStr(prevWs2);
+      prevSec2=(S.log[prevWk2]&&S.log[prevWk2][prevDk2])||0;
+    }
     let dayBg='';
     if(sec>0&&!isLive){
       // Completed shift: show only this day's calendar-day portion
@@ -2734,10 +2741,10 @@ function renderHistoryTab(rate){
             h+='<div style="font-size:9px;color:var(--mut);margin-bottom:6px">Times locked while shift is active</div>';
           }else{
           h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:6px">';
-          h+='<input id="hdt-start-'+dk+'" type="time" value="'+shStart+'" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
+          h+='<input id="hdt-start-'+dk+'" type="time" value="'+shStart+'" oninput="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
           h+='<span style="font-size:10px;color:var(--mut)">→</span>';
-          h+='<input id="hdt-end-'+dk+'" type="time" value="'+(pendingEnd?pendingEnd.v:shEnd)+'" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift end">';
-          h+='<span id="hde-apply-'+dk+'"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:4px 10px;border-radius:6px;background:transparent;min-height:32px" title="Apply">✓ Apply</button></span>';
+          h+='<input id="hdt-end-'+dk+'" type="time" value="'+(pendingEnd?pendingEnd.v:shEnd)+'" oninput="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift end">';
+          h+='<span id="hde-apply-'+dk+'" style="opacity:0.3;transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:4px 10px;border-radius:6px;background:transparent;min-height:32px" title="Apply">✓ Apply</button></span>';
           h+='</div>';
           }
           h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">';
