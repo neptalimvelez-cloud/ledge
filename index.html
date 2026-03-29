@@ -238,19 +238,46 @@ body::before{
   border-radius:26px;
   box-shadow:0 8px 32px rgba(0,0,0,0.5),0 1px 0 rgba(255,255,255,0.06) inset;
   overflow:hidden;
-  transition:height 0.3s ease;
+  transition:height 0.3s ease, width 0.3s ease, border-radius 0.3s ease;
+}
+#bottom-nav.collapsed{
+  height:40px;
+  width:40px;
+  border-radius:20px;
 }
 #bottom-nav::before{
   content:'';position:absolute;top:8px;bottom:8px;right:0;width:1px;
   background:linear-gradient(180deg,transparent,rgba(168,199,255,0.18),transparent);
 }
 /* Vertical button column */
-#bottom-nav>div{
+#bottom-nav .nav-tabs{
   display:flex;flex-direction:column;
-  width:100%;height:100%;
+  width:100%;flex:1;
   justify-content:space-evenly;
   align-items:center;
+  overflow:hidden;
+  transition:opacity 0.2s ease;
 }
+#bottom-nav.collapsed .nav-tabs{
+  opacity:0;
+  pointer-events:none;
+  height:0;
+  flex:0;
+}
+#bottom-nav .nav-wrap{
+  display:flex;flex-direction:column;
+  width:100%;height:100%;
+}
+#bottom-nav .nav-toggle{
+  width:100%;
+  padding:8px 4px;
+  background:none;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:var(--mut);
+  transition:all 0.2s;
+  flex-shrink:0;
+}
+#bottom-nav .nav-toggle:active{opacity:0.6}
 #bottom-nav button{
   width:100%;
   padding:6px 4px;
@@ -368,7 +395,9 @@ body::before{
 #save-toast .toast-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
 
 /* ── Page container ─────────────────────────────────── */
-.page{padding:16px 16px calc(80px + env(safe-area-inset-bottom,0px)) 60px;max-width:560px;margin:0 auto}
+.page{padding:16px 16px calc(80px + env(safe-area-inset-bottom,0px)) var(--nav-pad,60px);max-width:560px;margin:0 auto;transition:padding-left 0.3s ease}
+#content.nav-collapsed{--nav-pad:16px}
+#content{--nav-pad:60px}
 
 /* ── Typography ─────────────────────────────────────── */
 .label{
@@ -1738,13 +1767,25 @@ function render(){
   else renderCalApp();
 }
 
+let _navCollapsed=false;
+function toggleNav(){
+  _navCollapsed=!_navCollapsed;
+  document.getElementById('bottom-nav').classList.toggle('collapsed',_navCollapsed);
+  document.getElementById('content').classList.toggle('nav-collapsed',_navCollapsed);
+}
 function renderNav(){
   const tabs=S.app==='tracker'?TRACKER_TABS:S.app==='budget'?BUDGET_TABS:S.app==='worth'?WORTH_TABS:CAL_TABS;
   const cur=S.app==='tracker'?S.trackerTab:S.app==='budget'?S.budgetTab:S.app==='worth'?S.worthTab:S.calTab;
-  document.getElementById('bottom-nav').innerHTML='<div>'+tabs.map(t=>`
+  const nav=document.getElementById('bottom-nav');
+  nav.classList.toggle('collapsed',_navCollapsed);
+  document.getElementById('content').classList.toggle('nav-collapsed',_navCollapsed);
+  nav.innerHTML='<div class="nav-wrap"><div class="nav-tabs">'+tabs.map(t=>`
     <button class="${cur===t.id?'active':''}" onclick="setTab('${t.id}')">
       <span class="n-icon">${t.icon}</span><span class="n-lbl">${t.lbl}</span>
-    </button>`).join('')+'</div>';
+    </button>`).join('')+'</div>'
+    +'<button class="nav-toggle" onclick="toggleNav()" title="'+ (_navCollapsed?'Expand':'Collapse')+' nav">'
+    +(_navCollapsed?'▶':'◀')
+    +'</button></div>';
 }
 
 // ─── TRACKER ─────────────────────────────────────────────────────────────────
