@@ -219,7 +219,8 @@ body::before{
 }
 
 /* ── Scroll content ─────────────────────────────────── */
-#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:none}
+#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:none;margin-left:40px;transition:margin-left 0.3s ease}
+#content.nav-collapsed{margin-left:0}
 #content::-webkit-scrollbar{display:none}
 
 /* ── Side Nav (Left Vertical Pill) ──────────────────── */
@@ -395,8 +396,8 @@ body::before{
 #save-toast .toast-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
 
 /* ── Page container ─────────────────────────────────── */
-.page{padding:16px 16px calc(80px + env(safe-area-inset-bottom,0px)) var(--nav-pad,60px);max-width:560px;margin:0 auto;transition:padding-left 0.3s ease}
-#content.nav-collapsed{--nav-pad:16px}
+.page{padding:16px 16px calc(80px + env(safe-area-inset-bottom,0px)) 20px;max-width:560px;margin:0 auto}
+#content.nav-collapsed{--nav-pad:16px;margin-left:0}
 #content{--nav-pad:60px}
 
 /* ── Typography ─────────────────────────────────────── */
@@ -1233,12 +1234,12 @@ function clearPin(){S.pin='';save('pin');showToast(true);render();}
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
 let toastTimer;
-function showToast(manual=true){
+function showToast(manual=true,msg=''){
   const t=document.getElementById('save-toast'),m=document.getElementById('toast-msg');
   if(!t)return;
   t.classList.remove('manual');
   if(manual)t.classList.add('manual');
-  m.textContent=manual?'SAVED':'AUTO-SAVED';
+  m.textContent=msg||(manual?'SAVED':'AUTO-SAVED');
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
@@ -2576,7 +2577,7 @@ function confirmAddBreak(wk,dk){
   const minsEl=document.getElementById('add-brk-min-'+dk);
   const lblEl=document.getElementById('add-brk-lbl-'+dk);
   const mins=parseFloat(minsEl?.value)||0;
-  if(mins<=0){showToast('Enter break minutes');return;}
+  if(mins<=0){showToast(true,'Enter break minutes');return;}
   const brkSec=mins*60;
   const label=(lblEl?.value||'').trim()||'Manual break';
   if(!S.breakLog[wk])S.breakLog[wk]={};
@@ -2686,6 +2687,12 @@ function backfillMissedShifts(){
       const merged=[..._cbl,..._pbl];
       S.breakLog={...S.breakLog,[wk]:{...(S.breakLog[wk]||{}),[dk]:merged}};
       lsSet('break_log_v1',S.breakLog);
+      // Clear committed breaks from pause state to prevent re-application
+      if(ps&&ps.dayKey===dk){
+        const clearedPause={...ps,breakLog:[],accBreakSec:0,onBreak:false,breakStart:null};
+        lsSet('pause_v3',clearedPause);
+        if(S.pause.dayKey===dk)S.pause=clearedPause;
+      }
     }
     changed=true;
   }
@@ -2770,6 +2777,13 @@ function renderHistoryTab(rate){
       logWkKeys.add(wk);
     }
   }
+  // Add weeks that only have PTO (no log or custom shifts)
+  for(const wk of Object.keys(S.pto)){
+    if(!logWkKeys.has(wk)){
+      const ptoG=Object.values(S.pto[wk]).reduce((s,sec)=>s+(sec/3600)*rate,0);
+      if(ptoG>0){logWks.push({key:wk,totalSec:0,gross:ptoG});logWkKeys.add(wk);}
+    }
+  }
   const allWks=logWks.sort((a,b)=>b.key.localeCompare(a.key));
   const allTime=allWks.reduce((s,w)=>s+w.gross,0);
   const now=new Date(),curWk=wkKey(now),ytdYr=now.getFullYear();
@@ -2792,6 +2806,9 @@ function renderHistoryTab(rate){
   }
   const ytdSecs={}; // kept for YTD month row display (hours)
   for(const[,dm]of Object.entries(S.log)){for(const[dk,sec]of Object.entries(dm)){const d=parseLocal(dk);if(d.getFullYear()===ytdYr){const m=d.getMonth();ytdSecs[m]=(ytdSecs[m]||0)+sec;}}}
+  // Add PTO seconds to ytdSecs for display
+  const ytdPtoSecs={};
+  for(const[wk,days]of Object.entries(S.pto)){for(const[dk,sec]of Object.entries(days)){const d=parseLocal(dk);if(d.getFullYear()===ytdYr){const m=d.getMonth();ytdPtoSecs[m]=(ytdPtoSecs[m]||0)+sec;}}}
   const ytdGross=Object.values(ytdGrossByMo).reduce((a,b)=>a+b,0);
   const ytdCsG=0; // already included in allWks gross
   const ytdNet=applyDed(ytdGross,S.deductions);
@@ -3010,14 +3027,15 @@ function renderHistoryTab(rate){
     }).join('');
   }else{
     // YTD
-    const moRows=Array.from({length:12},(_,m)=>m).filter(m=>ytdSecs[m]||m<=now.getMonth()).map(m=>{
+    const moRows=Array.from({length:12},(_,m)=>m).filter(m=>ytdSecs[m]||ytdPtoSecs[m]||m<=now.getMonth()).map(m=>{
       const sec=ytdSecs[m]||0;
+      const ptoSec=ytdPtoSecs[m]||0;
       const cmG=S.customShifts.filter(cs=>{const d=parseLocal(cs.date);return d.getFullYear()===ytdYr&&d.getMonth()===m;}).reduce((s,c)=>s+csGross(c),0);
       const g=ytdGrossByMo[m]||0,n=applyDed(g,S.deductions),isCur=m===now.getMonth(),isPast=m<now.getMonth();
       return`<div class="flex" style="align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surf);margin-bottom:6px;border-left:2px solid ${isCur?'var(--acc)':isPast&&g>0?'var(--accd)':'var(--bdr)'};opacity:${!isPast&&!isCur?.4:1}">
         <div>
           <div style="font-size:11px;color:${isCur?'var(--acc)':'var(--txt)'}">${MONTHS[m]} ${ytdYr}</div>
-          ${(sec>0||cmG>0)?`<div style="font-size:8px;color:var(--mut);margin-top:2px">${(sec/3600).toFixed(1)}h${cmG>0?` + ${fmt$(cmG)} custom`:''}</div>`:''}
+          ${(sec>0||cmG>0||ptoSec>0)?`<div style="font-size:8px;color:var(--mut);margin-top:2px">${(sec/3600).toFixed(1)}h${ptoSec>0?' + <span style="color:var(--blu)">'+(ptoSec/3600).toFixed(1)+'h PTO</span>':''}${cmG>0?` + ${fmt$(cmG)} custom`:''}</div>`:''}
         </div>
         <div class="right">
           <div style="font-size:14px;font-weight:bold;color:${isCur?'var(--acc)':g>0?'var(--txt)':'var(--mut2)'}">${g>0?fmt$(n):'—'}</div>
@@ -3088,7 +3106,10 @@ function showPayStub(wkStr){
   const we=wkEnd(parseLocal(wkStr));
   let dedLines='',dedTotal=0;
   for(const dd of ded){const v=parseFloat(dd.value)||0;const amt=dd.type==='flat'?v:gross*(v/100);dedTotal+=amt;dedLines+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr)"><span style="font-size:11px;color:var(--mut)">${dd.label}</span><span style="font-size:11px;color:var(--red)">−${fmt$(amt)}</span></div>`;}
-  const net=gross-dedTotal;
+  const taxPct=parseFloat(S.taxRate)||0;
+  const taxAmt=taxPct>0?gross*(taxPct/100):0;
+  dedTotal+=taxAmt;
+  const net=Math.max(0,gross-dedTotal);
   const pc=S.paychecks[wkStr];
   const modal=document.createElement('div');
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px';
@@ -3106,9 +3127,11 @@ function showPayStub(wkStr){
     </div>
     ${Object.entries(dm).map(([dk,sec])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10px;color:var(--mut)"><span>${dk} (${(sec/3600).toFixed(2)}h)</span><span>${fmt$(calcEarnings(sec,rate,oa,om))}</span></div>`).join('')}
     ${cg>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10px;color:var(--pur)"><span>Custom shifts</span><span>${fmt$(cg)}</span></div>`:''}
+    ${(()=>{const wp=S.pto[wkStr];if(!wp)return'';const ptoSec=Object.values(wp).reduce((s,v)=>s+v,0);const ptoEarn=(ptoSec/3600)*rate;return'<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10px;color:var(--blu)"><span>☂ PTO ('+Math.floor(ptoSec/3600)+'h'+(ptoSec%3600>0?' '+Math.round((ptoSec%3600)/60)+'m':'')+')</span><span>'+fmt$(ptoEarn)+'</span></div>';})()}
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bdr)">
       <div style="font-size:8px;letter-spacing:2px;color:var(--mut);margin-bottom:8px">DEDUCTIONS</div>
       ${dedLines||'<div style="font-size:10px;color:var(--mut2)">None</div>'}
+      ${taxAmt>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr)"><span style="font-size:11px;color:var(--mut)">Est. Tax (${taxPct}%)</span><span style="font-size:11px;color:var(--red)">−${fmt$(taxAmt)}</span></div>`:''}
     </div>
     <div style="display:flex;justify-content:space-between;padding:12px 0;border-top:1px solid var(--bdrh);margin-top:8px">
       <span style="font-size:13px;font-weight:bold">Net Pay</span><span style="font-size:20px;font-weight:bold;color:var(--acc)">${fmt$(net)}</span>
@@ -3170,7 +3193,7 @@ function confirmAddPto(wk){
   if(!dk)return;
   const ref=parseLocal(dk);
   const actualWk=localStr(getWeekStart(ref,S.schedule.weekStartDay,S.schedule.weekStartTime));
-  if(actualWk!==wk){showToast(false,'Date not in this pay week');return;}
+  if(actualWk!==wk){showToast(true,'Date not in this pay week');return;}
   const sec=hrs*3600+mins*60;
   S.pto={...S.pto,[wk]:{...(S.pto[wk]||{}),[dk]:sec}};
   save('pto');
@@ -3205,6 +3228,12 @@ function delHistDay(wk,dk){
     if(Object.keys(wkSt).length)S.shiftTimes={...S.shiftTimes,[wk]:wkSt};
     else{const st={...S.shiftTimes};delete st[wk];S.shiftTimes=st;}
     save('shiftTimes');
+  }
+  if(S.pto[wk]&&S.pto[wk][dk]){
+    const wkPto={...S.pto[wk]};delete wkPto[dk];
+    if(Object.keys(wkPto).length)S.pto={...S.pto,[wk]:wkPto};
+    else{const p={...S.pto};delete p[wk];S.pto=p;}
+    save('pto');
   }
   save('log');render();
 }
@@ -4925,7 +4954,7 @@ function renderBudgetDebt(){
         ${[['snowball','Snowball','Smallest balance first'],['avalanche','Avalanche','Highest rate first']].map(([v,l,sub])=>`<button style="flex:1;padding:10px 8px;text-align:left;border:1px solid ${_debtMethod===v?'var(--acc)':'var(--bdr)'};background:${_debtMethod===v?'var(--accd)':'transparent'};color:${_debtMethod===v?'var(--acc)':'var(--mut)'}" onclick="_debtMethod='${v}';renderBudgetDebt()"><div style="font-size:11px;font-weight:bold;margin-bottom:3px">${l}</div><div style="font-size:8px;opacity:.7">${sub}</div></button>`).join('')}
       </div>
       <div class="label2">Extra Monthly Payment</div>
-      <div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step="10" inputmode="decimal" placeholder="${Math.round(effExtra)||0}" value="${_debtExtra}" oninput="_debtExtra=this.value;renderBudgetDebt()" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div>
+      <div class="inp-row"><span class="pre" style="font-size:16px">$</span><input type="number" min="0" step="10" inputmode="decimal" placeholder="${Math.round(effExtra)||0}" value="${_debtExtra}" oninput="_debtExtra=this.value" onblur="renderBudgetDebt()" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div>
       ${mBal>0?`<div style="font-size:9px;color:var(--mut);margin-top:6px">Monthly surplus is ${fmt$(mBal)} — allocate some toward debt</div>`:''}
     </div>`:''}
 
@@ -5203,7 +5232,7 @@ function renderAccounts(){
       +'<div style="display:flex;align-items:center;gap:8px">'
       +'<div style="flex:1;display:flex;align-items:center;border:1px solid var(--bdrh);background:var(--surf)">'
       +'<span style="padding:0 8px;color:var(--mut)">$</span>'
-      +'<input id="k401-anchor-input" type="number" min="0" step="100" placeholder="'+(dispBal>0?Math.round(dispBal)+'':'Enter actual balance')+'" '
+      +'<input id="k401-anchor-input" type="number" min="0" step="100" inputmode="decimal" placeholder="'+(dispBal>0?Math.round(dispBal)+'':'Enter actual balance')+'" '
       +'style="flex:1;border:none;background:transparent;font-size:15px;padding:7px 4px;color:var(--txt)">'
       +'</div>'
       +'<button class="btn-acc btn-sm" onclick="set401kAnchor(document.getElementById(\'k401-anchor-input\').value)">Set Actual</button>'
@@ -5318,7 +5347,7 @@ function renderNetWorth(){
       <div class="label">Add Asset</div>
       <input id="af-label" placeholder="e.g. Emergency Fund, Car" style="margin-bottom:10px">
       <div class="flex gap8 mb10">
-        <div class="f1"><div class="label2">Value</div><div class="inp-row"><span class="pre">$</span><input id="af-value" type="number" min="0" step="100" placeholder="0" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
+        <div class="f1"><div class="label2">Value</div><div class="inp-row"><span class="pre">$</span><input id="af-value" type="number" min="0" step="100" inputmode="decimal" placeholder="0" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
         <div class="f1"><div class="label2">Type</div><select id="af-type">${ASSET_TYPES.map(t=>`<option value="${t.id}">${t.label}</option>`).join('')}</select></div>
       </div>
       <div class="flex gap8"><button class="btn-acc f1" onclick="saveAsset()">Add Asset</button><button class="btn-ghost" onclick="_showAssetForm=false;renderNetWorth()">Cancel</button></div>
@@ -5709,7 +5738,7 @@ function renderIncomeTab(){
       <div class="label">New Side Income</div>
       <input id="si-label" placeholder="e.g. Freelance, Gig, Tips" style="margin-bottom:10px">
       <div class="flex gap8 mb10">
-        <div class="f1"><div class="label2">Amount</div><div class="inp-row"><span class="pre">$</span><input id="si-amt" type="number" min="0" step="1" placeholder="0" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
+        <div class="f1"><div class="label2">Amount</div><div class="inp-row"><span class="pre">$</span><input id="si-amt" type="number" min="0" step="1" inputmode="decimal" placeholder="0" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>
         <div class="f1"><div class="label2">Frequency</div><select id="si-freq">${[['one-time','One-Time'],['weekly','Weekly'],['biweekly','Bi-Weekly'],['monthly','Monthly']].map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
       </div>
       <div class="flex gap8 mb10">
@@ -5779,8 +5808,8 @@ function renderSavingsChallenge(){
         <div class="label2 mb6">Custom Challenge</div>
         <div style="font-size:10px;color:var(--mut);margin-bottom:10px">Set a weekly savings target and duration</div>
         <div class="flex gap8 mb10">
-          <div class="f1"><div class="label2">Weekly Amount ($)</div><input id="cc-amt" type="number" min="1" step="5" placeholder="50"></div>
-          <div class="f1"><div class="label2">Duration (weeks)</div><input id="cc-wks" type="number" min="1" max="104" placeholder="52"></div>
+          <div class="f1"><div class="label2">Weekly Amount ($)</div><input id="cc-amt" type="number" min="1" step="5" inputmode="decimal" placeholder="50"></div>
+          <div class="f1"><div class="label2">Duration (weeks)</div><input id="cc-wks" type="number" min="1" max="104" inputmode="numeric" placeholder="52"></div>
         </div>
         <div class="mb10"><div class="label2">Link to savings account (optional)</div>${acctHint}${acctSelectCustom}</div>
         <button class="btn-acc btn-sm" style="width:100%" onclick="startCustomChallenge()">Start Custom Challenge</button>
@@ -6396,21 +6425,36 @@ function exportCSV(){
   Object.entries(S.log).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([wk,dm])=>{
     seenWks.add(wk);
     const sec=Object.values(dm).reduce((a,b)=>a+b,0);
+    const ptoSec=S.pto[wk]?Object.values(S.pto[wk]).reduce((a,b)=>a+b,0):0;
+    const totalHrs=(sec+ptoSec)/3600;
     const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
     const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wk),S.pto[wk]);
     const ded=g-applyDed(g,S.deductions),net=g-ded;
     const pc=S.paychecks[wk];
-    rows.push([wk,(sec/3600).toFixed(2),g.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
+    rows.push([wk,totalHrs.toFixed(2),g.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
   });
-  // Include weeks that only have custom shifts (no log entries)
+  // Include weeks that only have custom shifts or PTO (no log entries)
   for(const cs of S.customShifts){
     const wk=localStr(getWeekStart(parseLocal(cs.date),S.schedule.weekStartDay,S.schedule.weekStartTime));
     if(seenWks.has(wk))continue;
     seenWks.add(wk);
     const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
-    const ded=cg-applyDed(cg,S.deductions),net=cg-ded;
+    const ptoSec=S.pto[wk]?Object.values(S.pto[wk]).reduce((a,b)=>a+b,0):0;
+    const ptoEarn=(ptoSec/3600)*rate;
+    const g=cg+ptoEarn;
+    const ded=g-applyDed(g,S.deductions),net=g-ded;
     const pc=S.paychecks[wk];
-    rows.push([wk,'0.00',cg.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
+    rows.push([wk,(ptoSec/3600).toFixed(2),g.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
+  }
+  // Include weeks that only have PTO (no log or custom shifts)
+  for(const wk of Object.keys(S.pto)){
+    if(seenWks.has(wk))continue;
+    seenWks.add(wk);
+    const ptoSec=Object.values(S.pto[wk]).reduce((a,b)=>a+b,0);
+    const ptoEarn=(ptoSec/3600)*rate;
+    const ded=ptoEarn-applyDed(ptoEarn,S.deductions),net=ptoEarn-ded;
+    const pc=S.paychecks[wk];
+    rows.push([wk,(ptoSec/3600).toFixed(2),ptoEarn.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
   }
   rows.sort((a,b)=>a===rows[0]?-1:b===rows[0]?1:a[0].localeCompare(b[0]));
   const csv=rows.map(r=>r.join(',')).join('\n');
@@ -6506,7 +6550,7 @@ function renderFabShift(panel){
     h+='<div class="form-row"><div><div class="label2">Hours</div><input id="fab-cs-hrs" type="number" inputmode="decimal" min="0" step=".25" placeholder="8.0" value="'+_fabShift.hours+'" oninput="_fabShift.hours=this.value"></div>';
     h+='<div><div class="label2">Rate ($/hr)</div><div class="inp-row"><span class="pre">$</span><input id="fab-cs-rate" type="number" inputmode="decimal" min="0" step=".25" placeholder="'+defRate+'" value="'+_fabShift.rate+'" oninput="_fabShift.rate=this.value" style="border:none;background:transparent;font-size:14px;padding:7px 4px"></div></div></div>';
   } else {
-    h+='<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input id="fab-cs-gross" type="number" min="0" step=".01" placeholder="0.00" value="'+_fabShift.gross+'" oninput="_fabShift.gross=this.value" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>';
+    h+='<div class="mb10"><div class="label2">Gross Pay</div><div class="inp-row"><span class="pre" style="font-size:16px">$</span><input id="fab-cs-gross" type="number" min="0" step=".01" inputmode="decimal" placeholder="0.00" value="'+_fabShift.gross+'" oninput="_fabShift.gross=this.value" style="border:none;background:transparent;font-size:20px;padding:8px 4px"></div></div>';
   }
   if(previewGross>0) h+='<div style="font-size:11px;color:var(--pur);margin-bottom:10px">\u2192 '+fmt$(previewGross)+' gross</div>';
   h+='<div class="flex gap8">';
@@ -6536,7 +6580,7 @@ function renderFabExpense(panel){
   h+='<button class="btn-ghost btn-sm" onclick="closeFabPanel()">\u2715</button></div>';
   h+='<div class="flex gap8 mb10">';
   h+='<div class="f1"><div class="label2">Amount</div><div class="inp-row"><span class="pre">$</span>';
-  h+='<input id="fab-exp-amt" type="number" min="0" step=".01" placeholder="0.00" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>';
+  h+='<input id="fab-exp-amt" type="number" min="0" step=".01" inputmode="decimal" placeholder="0.00" style="border:none;background:transparent;font-size:18px;padding:8px 4px"></div></div>';
   h+='<div class="f1"><div class="label2">Description</div><input id="fab-exp-desc" placeholder="e.g. Coffee, Gas"></div>';
   h+='</div>';
   h+='<div class="label2">Category</div>';
