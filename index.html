@@ -1108,6 +1108,7 @@ let S={
   breakLog:{},
   pto:{},
   shiftTimes:{},
+  lastFabAccount:'',
 };
 
 function loadState(){
@@ -1143,6 +1144,7 @@ function loadState(){
   if(bkl)S.breakLog=bkl;
   const ptoData=lsGet('pto_v1');if(ptoData)S.pto=ptoData;
   const stData=lsGet('shift_times_v1');if(stData)S.shiftTimes=stData;
+  const lfaData=lsGet('last_fab_account_v1');if(lfaData!=null)S.lastFabAccount=lfaData;
   const edd=lsGet('early_deposit_v1');if(edd!=null)S.earlyDepositDays=edd;
   const thm=lsGet('theme_v1');if(thm)S.theme=thm;
   const wiz=lsGet('wizard_seen_v1');if(wiz)S.wizardSeen=wiz;
@@ -1193,7 +1195,8 @@ function save(key){
     accentColor:'accent_color_v1',
     breakLog:'break_log_v1',
     pto:'pto_v1',
-    shiftTimes:'shift_times_v1'
+    shiftTimes:'shift_times_v1',
+    lastFabAccount:'last_fab_account_v1'
   };
   lsSet(map[key],S[key]);
   showToast(false);
@@ -1323,18 +1326,28 @@ function getLiveEarned(){
   return calcEarnings(netSec,rate,oa,om);
 }
 function weekGross(dayMap,skipDk,liveSec,rate,otA,otM,otMode,csGrossAmt,coveredDays,ptoMap){
-  // coveredDays: Set of dayKey strings replaced by custom shifts (no double-count)
-  const extra=csGrossAmt||0;
+  // csGrossAmt may be a number (legacy flat sum) or a CS array (preferred for OT accuracy)
   const covered=coveredDays||new Set();
   const pto=ptoMap||{};
   const ptoEarn=Object.values(pto).reduce((s,sec)=>s+(sec/3600)*rate,0);
   const effLive=covered.has(skipDk)?0:liveSec;
+  // Split CS list: hourly hours flow into OT pool, flat gross added directly
+  let csHrSec=0,csFlatGross=0;
+  if(Array.isArray(csGrossAmt)){
+    for(const c of csGrossAmt){
+      if(c.type==='hourly'){csHrSec+=(parseFloat(c.hours)||0)*3600;}
+      else{csFlatGross+=parseFloat(c.gross)||0;}
+    }
+  }else{csFlatGross=csGrossAmt||0;}
   function filteredMap(){return Object.fromEntries(Object.entries(dayMap).filter(([k])=>k!==skipDk&&!covered.has(k)));}
   if(otMode==='week'){
     const s=Object.values(filteredMap()).reduce((a,b)=>a+b,0);
-    return calcEarnings(s+effLive,rate,otA,otM)+extra+ptoEarn;
+    // Hourly CS seconds join the OT pool; flat CS gross added directly
+    return calcEarnings(s+effLive+csHrSec,rate,otA,otM)+csFlatGross+ptoEarn;
   }
-  let t=extra+ptoEarn;
+  // Shift-mode: each unit calculated independently
+  let t=csFlatGross+ptoEarn;
+  if(csHrSec>0)t+=calcEarnings(csHrSec,rate,otA,otM);
   for(const[k,v]of Object.entries(filteredMap()))t+=calcEarnings(v,rate,otA,otM);
   return t+calcEarnings(effLive,rate,otA,otM);
 }
@@ -1919,10 +1932,13 @@ function tickTracker(){
     const eP=(shEm/1440*100).toFixed(1);
     const g='rgba(93,232,160,',o='rgba(255,173,107,';
     if(ov){
-      // Overnight live: this row is the starting day — always show pre-midnight portion only
+      // Overnight live: this row is the starting day — show pre-midnight portion only.
+      // If past midnight, clamp to 100% so gradient doesn't collapse backwards.
+      const pastMid=nowMin<shSm;
+      const nPcap=pastMid?'100':nP;
       ldr.style.background=p.onBreak
-        ?'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) 100%)'
-        :'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.2) '+sP+'%,'+g+'0.1) '+nP+'%,transparent '+nP+'%)';
+        ?'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.12) '+nPcap+'%,'+o+'0.15) '+nPcap+'%,'+o+'0.06) 100%)'
+        :'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.2) '+sP+'%,'+g+'0.1) '+nPcap+'%,transparent '+nPcap+'%)';
     }else{
       ldr.style.background=p.onBreak
         ?'linear-gradient(180deg,transparent '+sP+'%,'+g+'0.18) '+sP+'%,'+g+'0.12) '+nP+'%,'+o+'0.15) '+nP+'%,'+o+'0.06) '+eP+'%,transparent '+eP+'%)'
@@ -1964,15 +1980,18 @@ function renderTrackerTab(now,rate,ws,wk){
   const thisWk=S.log[wk]||{};
   const todayDk=shift?dayKey(shift.date):dayKey(now);
   const priorSec=Object.entries(thisWk).reduce((s,[k,v])=>k===todayDk?s:s+v,0);
-  const thisCsG=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
+  const thisCsG=csInWeek(wk);
+  const thisCsGrossAmt=thisCsG.reduce((s,c)=>s+csGross(c),0);
   const coveredDays=csCoveredDays(wk);
   const todayIsCovered=coveredDays.has(todayDk);
   let earned=0;
   if(todayIsCovered) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
   else if(otMode==='week')earned=calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
   else earned=calcEarnings(netSec,rate,oa,om);
+  // Include hourly CS hours in OT pool for week-mode OT indicator
+  const csHrSecWk=thisCsG.filter(c=>c.type==='hourly').reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
   const ot=otMode==='week'?
-    {inOT:(priorSec+netSec)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorSec+netSec)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
+    {inOT:(priorSec+netSec+csHrSecWk)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorSec+netSec+csHrSecWk)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
     {inOT:netSec/3600>(parseFloat(oa)||Infinity),otHours:Math.max(0,netSec/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)};
 
   const totalNetSec=priorSec+(shift?netSec:(thisWk[todayDk]||0));
@@ -2052,7 +2071,8 @@ function renderTrackerTab(now,rate,ws,wk){
     `;
   }
 
-  // day breakdown
+  // day breakdown — build csByDate first so dayRows can reference it
+  const csByDate=Object.fromEntries(csInWeek(wk).map(c=>[c.date,c]));
   const dayRows=Array.from({length:7},(_,i)=>{
     const dow=(parseInt(S.schedule.weekStartDay||0)+i)%7;
     const sh=S.schedule.shifts[dow];
@@ -2126,10 +2146,14 @@ function renderTrackerTab(now,rate,ws,wk){
       const nowMin=now.getHours()*60+now.getMinutes();
       const nowPct=(nowMin/1440*100).toFixed(1);
       if(overnight){
-        // Live overnight: starting day shows pre-midnight progress only
+        // Live overnight: starting day shows pre-midnight portion (sPct→midnight).
+        // If past midnight (nowMin < shSm), the pre-midnight portion is fully elapsed —
+        // clamp capPct to 100% so the gradient doesn't collapse backwards. Spill shows on next row.
+        const pastMidnight=nowMin<shSm;
+        const capPct=pastMidnight?'100':nowPct;
         dayBg=onBreakNow
-          ?'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) 100%);'
-          :'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) '+nowPct+'%,transparent '+nowPct+'%);';
+          ?'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.12) '+capPct+'%,'+orgS+'0.15) '+capPct+'%,'+orgS+'0.06) 100%);'
+          :'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.2) '+sPct+'%,'+grnS+'0.1) '+capPct+'%,transparent '+capPct+'%);';
       }else{
         dayBg=onBreakNow
           ?'background:linear-gradient(180deg,transparent '+sPct+'%,'+grnS+'0.18) '+sPct+'%,'+grnS+'0.12) '+nowPct+'%,'+orgS+'0.15) '+nowPct+'%,'+orgS+'0.06) '+ePct+'%,transparent '+ePct+'%);'
@@ -2137,29 +2161,41 @@ function renderTrackerTab(now,rate,ws,wk){
       }
     }
     const hasSpill=prevLiveSpill||(prevOvernight2&&prevSec2>0&&prevEPct2);
-    return`<div class="day-row" ${isLive?'id="live-day-row" ':''}style="opacity:${sh.active||hasSpill?1:.28};${dayBg}${isLive||prevLiveSpill?'border-radius:4px;':''}">
+    // Custom shift on this calendar day: purple tint highlight
+    const csOnDay=csByDate[dk];
+    const csBg=csOnDay&&!isLive?'background:linear-gradient(180deg,rgba(168,130,255,0.10),rgba(168,130,255,0.04));':'';
+    return`<div class="day-row" ${isLive?'id="live-day-row" ':''}style="opacity:${sh.active||hasSpill||csOnDay?1:.28};${isLive||prevLiveSpill?dayBg:csOnDay?csBg:dayBg}${isLive||prevLiveSpill?'border-radius:4px;':''}">
       <div class="flex" style="align-items:center;gap:10px">
-        <span class="day-dot${isLive?(onBreakNow?' on-break':' live'):prevLiveSpill?' live':sec>0||hasSpill?' done':''}"></span>
-        <span style="font-size:12px;width:28px;color:${isLive||prevLiveSpill?'var(--txt)':hasSpill?'var(--txt)':'var(--mut)'};font-weight:${isLive||prevLiveSpill?'bold':'normal'}">${DAYS[dow]}</span>
+        <span class="day-dot${isLive?(onBreakNow?' on-break':' live'):prevLiveSpill?' live':sec>0||hasSpill?' done':csOnDay?' done':''}"></span>
+        <span style="font-size:12px;width:28px;color:${isLive||prevLiveSpill?'var(--txt)':hasSpill?'var(--txt)':csOnDay?'var(--pur)':'var(--mut)'};font-weight:${isLive||prevLiveSpill||csOnDay?'bold':'normal'}">${DAYS[dow]}</span>
         ${sh.active?`<span style="font-size:8px;color:var(--mut2);letter-spacing:1px">${sh.start}–${sh.end}</span>`:''}
+        ${csOnDay?`<span style="font-size:8px;color:var(--pur);letter-spacing:1px">◉ ${csOnDay.label||'Custom'}</span>`:''}
         ${prevLiveSpill?`<span style="font-size:8px;color:var(--grn);letter-spacing:1px">← overnight</span>`:''}
         ${!prevLiveSpill&&hasSpill&&!sh.active?`<span style="font-size:8px;color:var(--mut);letter-spacing:1px">← overnight</span>`:''}
       </div>
-      <span style="font-size:14px;color:${isLive?(onBreakNow?'var(--org)':(ot.inOT?'var(--org)':'var(--grn)')):(sec>0||hasSpill?'var(--txt)':'var(--mut2)')};font-weight:${isLive||prevLiveSpill?'bold':'normal'}">
-        ${sh.active?(otMode==='shift'?fmt$(dayE||0):`${(sec/3600).toFixed(1)}h`):'—'}
+      <span style="font-size:14px;color:${isLive?(onBreakNow?'var(--org)':(ot.inOT?'var(--org)':'var(--grn)')):(csOnDay?'var(--pur)':sec>0||hasSpill?'var(--txt)':'var(--mut2)')};font-weight:${isLive||prevLiveSpill||csOnDay?'bold':'normal'}">
+        ${csOnDay?fmt$(csGross(csOnDay)):sh.active?(otMode==='shift'?fmt$(dayE||0):`${(sec/3600).toFixed(1)}h`):'—'}
       </span>
     </div>`;
   }).join('');
 
   const thisCsList=csInWeek(wk);
-  const csRows=thisCsList.map(c=>`<div class="day-row">
-    <div class="flex" style="align-items:center;gap:10px">
-      <span style="width:6px;height:6px;border-radius:50%;background:var(--pur);display:inline-block"></span>
-      <span style="font-size:12px;color:var(--txt)">${c.label||'Custom Shift'}</span>
-      <span style="font-size:8px;color:var(--mut)">${c.date}</span>
+  const csRows=thisCsList.map(c=>{
+    const hrs=c.type==='hourly'?`${parseFloat(c.hours)||0}h @ ${fmt$(parseFloat(c.rate)||0)}/hr`:`flat pay`;
+    return `<div class="day-row" style="background:linear-gradient(90deg,rgba(168,130,255,0.08),transparent);border-left:2px solid var(--pur);padding-left:10px">
+    <div class="flex" style="align-items:center;gap:8px;min-width:0">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--pur);flex-shrink:0;display:inline-block"></span>
+      <div style="min-width:0">
+        <div style="font-size:12px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.label||'Custom Shift'}</div>
+        <div style="font-size:8px;color:var(--mut)">${c.date} · ${hrs}</div>
+      </div>
     </div>
-    <span style="font-size:14px;color:var(--pur);font-weight:bold">${fmt$(csGross(c))}</span>
-  </div>`).join('');
+    <div class="flex" style="align-items:center;gap:8px;flex-shrink:0">
+      <span style="font-size:14px;color:var(--pur);font-weight:bold">${fmt$(csGross(c))}</span>
+      <button onclick="deleteCS('${c.id}')" style="font-size:9px;color:var(--mut);border:1px solid var(--bdr);padding:2px 7px;border-radius:var(--radius-xs);background:transparent">&times;</button>
+    </div>
+  </div>`;
+  }).join('');
 
   const pcVariance=actualPc?.amount?(actualPc.amount-projNet):null;
 
@@ -2211,7 +2247,7 @@ function renderTrackerTab(now,rate,ws,wk){
           +'</div>'
           +'</div>';
       })()}
-      ${otMode==='week'?`<div class="flex" style="justify-content:space-between;padding:9px 0;font-size:11px"><span class="mut">Total: ${(totalNetSec/3600).toFixed(1)}h${ot.inOT?` (${ot.otHours.toFixed(1)}h OT)`:''}</span><span style="color:${ot.inOT?'var(--org)':'var(--txt)'};font-weight:bold">${fmt$(wGross-thisCsG)}</span></div>`:''}
+      ${otMode==='week'?`<div class="flex" style="justify-content:space-between;padding:9px 0;font-size:11px"><span class="mut">Total: ${(totalNetSec/3600).toFixed(1)}h${ot.inOT?` (${ot.otHours.toFixed(1)}h OT)`:''}</span><span style="color:${ot.inOT?'var(--org)':'var(--txt)'};font-weight:bold">${fmt$(wGross-thisCsGrossAmt)}</span></div>`:''}
       ${csRows}
     </div>
 
@@ -2232,7 +2268,7 @@ function renderTrackerTab(now,rate,ws,wk){
       const prevWkEnd=wkEnd(prevWkStart);
       const prevWkLabel=`${MONTHS[prevWkStart.getMonth()]} ${prevWkStart.getDate()} – ${MONTHS[prevWkEnd.getMonth()]} ${prevWkEnd.getDate()}`;
       const prevDm=S.log[prevWk]||{};
-      const prevCsG=csInWeek(prevWk).reduce((s,c)=>s+csGross(c),0);
+      const prevCsG=csInWeek(prevWk);
       const prevCov=csCoveredDays(prevWk);
       const prevGross=weekGross(prevDm,'__x__',0,rate,oa,om,otMode,prevCsG,prevCov,S.pto[prevWk]);
       const prevNet=applyDed(prevGross,S.deductions);
@@ -2397,7 +2433,7 @@ function renderTrackerTab(now,rate,ws,wk){
       const pcEntries=Object.entries(S.paychecks).filter(([,pc])=>pc.amount).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,8);
       if(pcEntries.length<2)return'';
       const variances=pcEntries.map(([wkS,pc])=>{
-        const dm=S.log[wkS]||{};const cg=csInWeek(wkS).reduce((s,c)=>s+csGross(c),0);
+        const dm=S.log[wkS]||{};const cg=csInWeek(wkS);
         const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkS),S.pto[wkS]);
         const proj=applyDed(g,S.deductions);return{wk:wkS,actual:pc.amount,proj,diff:pc.amount-proj};
       });
@@ -2521,7 +2557,9 @@ let _breakLock=0;
 function handleBreak(){
   const now=Date.now();if(now-_breakLock<500)return;_breakLock=now;
   const nd=new Date(),p=S.pause;
-  const dk=p.dayKey||dayKey(nd);
+  // Use active shift date as dayKey so overnight shifts correctly attribute breaks to shift start day
+  const activeShift=getActiveShift(nd);
+  const dk=p.dayKey||(activeShift?dayKey(activeShift.date):dayKey(nd));
   if(!p.onBreak){
     S.pause={...p,onBreak:true,breakStart:now,dayKey:dk};
   }else{
@@ -2536,7 +2574,9 @@ function handleBreak(){
 
 function quickBreak(mins){
   const now=Date.now();if(now-_breakLock<500)return;_breakLock=now;
-  const dk=S.pause.dayKey||dayKey(new Date());
+  // Use active shift date as dayKey so overnight shifts correctly attribute breaks to shift start day
+  const activeShift=getActiveShift(new Date());
+  const dk=S.pause.dayKey||(activeShift?dayKey(activeShift.date):dayKey(new Date()));
   const sec=mins*60;
   const log=[...(S.pause.breakLog||[]),{id:Date.now().toString(),type:'quick',sec:sec,label:mins+'m',time:now}];
   S.pause={...S.pause,accBreakSec:(S.pause.accBreakSec||0)+sec,dayKey:dk,breakLog:log};
@@ -2765,7 +2805,7 @@ function renderHistoryTab(rate){
   // Build week list from log + any custom-shift-only weeks (no log entries)
   const logWks=Object.entries(S.log).map(([wk,dm])=>{
     const sec=Object.values(dm).reduce((a,b)=>a+b,0);
-    const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
+    const cg=csInWeek(wk);
     return{key:wk,totalSec:sec,gross:weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wk),S.pto[wk])};
   });
   // Add weeks that only have custom shifts (no log entry exists for that week)
@@ -2773,7 +2813,7 @@ function renderHistoryTab(rate){
   for(const cs of S.customShifts){
     const wk=localStr(getWeekStart(parseLocal(cs.date),S.schedule.weekStartDay,S.schedule.weekStartTime));
     if(!logWkKeys.has(wk)){
-      const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
+      const cg=csInWeek(wk);
       const _ptoG=S.pto[wk]?Object.values(S.pto[wk]).reduce((s,sec)=>s+(sec/3600)*rate,0):0;
       logWks.push({key:wk,totalSec:0,gross:cg+_ptoG});
       logWkKeys.add(wk);
@@ -2841,7 +2881,7 @@ function renderHistoryTab(rate){
   if(mode==='weeks'){
     tabContent=allWks.slice(0,20).map(w=>{
       const d=parseLocal(w.key),ded=w.gross-applyDed(w.gross,S.deductions),net=w.gross-ded,cur=w.key===curWk;
-      const cg=csInWeek(w.key).reduce((s,c)=>s+csGross(c),0);
+      const cg=csInWeek(w.key);
       const isExp=S.expandedWk===w.key;
       const pc=S.paychecks[w.key];
       const estNet=applyDed(w.gross,S.deductions);
@@ -3101,7 +3141,7 @@ function showPayStub(wkStr){
   const rate=parseFloat(S.schedule.hourlyRate)||0;
   const oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
   const dm=S.log[wkStr]||{};
-  const cg=csInWeek(wkStr).reduce((s,c)=>s+csGross(c),0);
+  const cg=csInWeek(wkStr);
   const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkStr),S.pto[wkStr]);
   const ded=S.deductions;
   const d=parseLocal(wkStr);
@@ -3458,7 +3498,7 @@ function renderDeductionsTab(now,rate,ws,wk){
   if(shift){if(p.paused&&p.pausedAt!=null)liveSec=p.pausedAt;else liveSec=secsIntoShift(now,toMin(shift.shift.start));}
   const brkLive=p.onBreak&&p.breakStart?Math.floor((now-p.breakStart)/1000):0;
   const netSec=Math.max(0,liveSec-(p.accBreakSec+brkLive));
-  const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
+  const cg=csInWeek(wk);
   const wG=weekGross(thisWk,todayDk,shift?netSec:(thisWk[todayDk]||0),rate,S.schedule.overtimeAfter,S.schedule.overtimeMultiplier,S.schedule.overtimeMode,cg,csCoveredDays(wk),S.pto[wk]);
   const wN=applyDed(wG,S.deductions);
 
@@ -4356,9 +4396,9 @@ function archiveOldOneTime(){
   const now=new Date();
   let changed=false;
   S.expenses=S.expenses.map(e=>{
-    if(e.frequency!=='one-time'||e.paid||e.archived||!e.oneTimeDate)return e;
+    if(e.frequency!=='one-time'||e.archived||!e.oneTimeDate)return e;
     const d=parseLocal(e.oneTimeDate);
-    // Archive if the expense month has fully passed
+    // Archive if the expense month has fully passed (handles both paid and unpaid)
     if(d.getFullYear()<now.getFullYear()||(d.getFullYear()===now.getFullYear()&&d.getMonth()<now.getMonth())){
       changed=true;return{...e,paid:true,archived:true};
     }
@@ -4470,7 +4510,7 @@ function renderBudgetForecastCalOnly(){
           paydayAmts[actualPay.getDate()]={amt:pc.amount,actual:true};
         } else {
           const dm=S.log[wsKey]||{};
-          const cg=csInWeek(wsKey).reduce((s,c)=>s+csGross(c),0);
+          const cg=csInWeek(wsKey);
           const gross=weekGross(dm,'__x__',0,rate,_oa,_om,_otMode,cg,csCoveredDays(wsKey),S.pto[wsKey]);
           const net=applyDed(gross,S.deductions);
           if(gross>0)paydayAmts[actualPay.getDate()]={amt:net,actual:false};
@@ -4703,7 +4743,7 @@ function renderCalHistory(){
       const actualPay=pc?.date?parseLocal(pc.date):payDate;
       if(actualPay.getFullYear()===yr&&actualPay.getMonth()===mo){
         const dm=S.log[wsKey]||{};
-        const cg=csInWeek(wsKey).reduce((s,c)=>s+csGross(c),0);
+        const cg=csInWeek(wsKey);
         const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wsKey),S.pto[wsKey]);
         const net=applyDed(gross,S.deductions);
         const amt=pc?.amount||net;
@@ -4898,6 +4938,7 @@ function linkGoalAccount(goalId,acctId){S.goals=S.goals.map(g=>g.id===goalId?{..
 
 // ─── BUDGET DEBT ─────────────────────────────────────────────────────────────
 let _showDebtForm=false,_debtForm={label:'',balance:'',rate:'',minimum:'',dayOfMonth:''},_debtMethod='snowball',_debtExtra='';
+let _debtEditing=null; // id of debt being edited, or null
 function runDebtPlan(debts,extra,method){
   if(!debts.length)return{months:0,totalInterest:0,events:[]};
   let ds=debts.map(d=>({...d,bal:parseFloat(d.balance)||0,r:parseFloat(d.rate)||0,min:parseFloat(d.minimum)||0,done:false})).filter(d=>d.bal>0);
@@ -4976,13 +5017,39 @@ function renderBudgetDebt(){
       })()}
     </div>`:''}
 
-    ${S.debts.map(d=>`<div class="card mb8" style="border-left:2px solid var(--red)">
-      <div class="flex" style="justify-content:space-between;align-items:flex-start">
-        <div><div style="font-size:14px;font-weight:bold;margin-bottom:2px">${d.label}</div>
-        <div style="font-size:9px;color:var(--mut)">${parseFloat(d.rate)>0?`${d.rate}% APR · `:''}Min ${fmt$(d.minimum)}/mo${d.dayOfMonth?` · Due day ${d.dayOfMonth}`:''}</div></div>
-        <div class="right"><div style="font-size:18px;font-weight:bold;color:var(--red)">${fmt$(d.balance)}</div><button class="btn-sm btn-ghost mt6" onclick="delDebt('${d.id}')">Remove</button></div>
-      </div>
-    </div>`).join('')}
+    ${(()=>{
+      let dh="";
+      for(const d of S.debts){
+        const isEd=_debtEditing===d.id;
+        dh+='<div class="card mb8" style="border-left:2px solid var(--red)">';
+        if(isEd){
+          dh+='<div class="label" style="margin-bottom:10px">Edit Debt</div>';
+          dh+='<input id="ded-label-'+d.id+'" value="'+d.label.replace(/"/g,'&quot;')+'" placeholder="Debt name" style="margin-bottom:10px">';
+          dh+='<div class="form-row">';
+          dh+='<div><div class="label2">Balance</div><div class="inp-row"><span class="pre">$</span><input id="ded-bal-'+d.id+'" type="number" inputmode="decimal" min="0" value="'+d.balance+'" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>';
+          dh+='<div><div class="label2">APR %</div><div class="inp-row"><input id="ded-rate-'+d.id+'" type="number" inputmode="decimal" min="0" step=".1" value="'+d.rate+'" style="border:none;background:transparent;font-size:15px;padding:7px 4px"><span style="padding:0 8px;color:var(--mut)">%</span></div></div>';
+          dh+='</div>';
+          dh+='<div class="form-row">';
+          dh+='<div><div class="label2">Minimum Monthly</div><div class="inp-row"><span class="pre">$</span><input id="ded-min-'+d.id+'" type="number" inputmode="decimal" min="0" value="'+d.minimum+'" style="border:none;background:transparent;font-size:15px;padding:7px 4px"></div></div>';
+          dh+='<div><div class="label2">Day of Month Due</div><input id="ded-dom-'+d.id+'" type="number" inputmode="numeric" min="1" max="31" value="'+d.dayOfMonth+'" placeholder="e.g. 15" style="flex:1"></div>';
+          dh+='</div>';
+          dh+='<div class="flex gap8 mt10">';
+          dh+='<button class="btn-acc f1" onclick="updateDebt(&quot;'+d.id+'&quot;)">Save</button>';
+          dh+='<button class="btn-red" onclick="delDebt(&quot;'+d.id+'&quot;)">Remove</button>';
+          dh+='<button class="btn-ghost" onclick="_debtEditing=null;renderBudgetDebt()">Cancel</button>';
+          dh+='</div>';
+        }else{
+          dh+='<div class="flex" style="justify-content:space-between;align-items:flex-start">';
+          dh+='<div><div style="font-size:14px;font-weight:bold;margin-bottom:2px">'+d.label+'</div>';
+          dh+='<div style="font-size:9px;color:var(--mut)">'+( parseFloat(d.rate)>0?d.rate+'% APR &middot; ' :''  )+'Min '+fmt$(d.minimum)+'/mo'+(d.dayOfMonth?' &middot; Due day '+d.dayOfMonth:'')+'</div></div>';
+          dh+='<div class="right"><div style="font-size:18px;font-weight:bold;color:var(--red)">'+fmt$(d.balance)+'</div>';
+          dh+='<button class="btn-sm btn-ghost mt6" onclick="_debtEditing=&quot;'+d.id+'&quot;;renderBudgetDebt()">Edit</button>';
+          dh+='</div></div>';
+        }
+        dh+='</div>';
+      }
+      return dh;
+    })()}
 
     ${_showDebtForm?`<div class="inline-form mb12">
       <div class="label">Add Debt</div>
@@ -5019,7 +5086,29 @@ function delDebt(id){
   S.debts=S.debts.filter(d=>d.id!==id);
   // Remove associated auto-expense
   S.expenses=S.expenses.filter(e=>e._debtId!==id);
-  save('debts');save('expenses');renderBudgetDebt();
+  save('debts');save('expenses');_debtEditing=null;renderBudgetDebt();
+}
+function updateDebt(id){
+  const l=document.getElementById('ded-label-'+id)?.value;
+  const b=document.getElementById('ded-bal-'+id)?.value;
+  if(!l||!b)return;
+  const r=document.getElementById('ded-rate-'+id)?.value||'0';
+  const m=document.getElementById('ded-min-'+id)?.value||'0';
+  const dom=document.getElementById('ded-dom-'+id)?.value||'';
+  S.debts=S.debts.map(d=>d.id===id?{...d,label:l,balance:b,rate:r,minimum:m,dayOfMonth:dom}:d);
+  // Update the linked auto-expense amount + dayOfMonth if it exists
+  S.expenses=S.expenses.map(e=>{
+    if(e._debtId!==id)return e;
+    return{...e,label:l+' (min payment)',amount:m,dayOfMonth:dom};
+  });
+  // If minimum changed to >0 and no linked expense exists, create one
+  const hasLinked=S.expenses.some(e=>e._debtId===id);
+  if(!hasLinked&&parseFloat(m)>0){
+    S.expenses=[...S.expenses,{id:'debt-exp-'+id,label:l+' (min payment)',category:'debt',
+      customCategory:'',amount:m,frequency:'monthly',oneTimeDate:'',dayOfMonth:dom,
+      active:true,_debtId:id}];
+  }
+  save('debts');save('expenses');_debtEditing=null;renderBudgetDebt();
 }
 
 let _showAssetForm=false,_assetForm={label:'',value:'',type:'savings'};
@@ -6378,7 +6467,7 @@ function clearAllDataConfirmed(){
     'tax_rate_v1','pin_v1','snapshots_v1','milestones_v1','ret401k_v1','side_income_v1',
     'savings_challenge_v1','transactions_v1','early_deposit_v1','income_thresholds_v1',
     'auto_cat_rules_v1','wizard_seen_v1','achievements_v1','theme_v1','accent_color_v1',
-    'break_log_v1','pto_v1','shift_times_v1','__activeApp__'];
+    'break_log_v1','pto_v1','shift_times_v1','last_fab_account_v1','__activeApp__'];
   keys.forEach(k=>localStorage.removeItem(k));
   // Reset state to defaults
   S={
@@ -6397,9 +6486,8 @@ function clearAllDataConfirmed(){
     breakLog:{},
     pto:{},
     shiftTimes:{},
+    lastFabAccount:'',
   };
-  applyTheme();
-  closeDataPanel();
   render();
   const t=document.getElementById('save-toast'),m=document.getElementById('toast-msg');
   if(t&&m){t.classList.remove('manual');t.classList.add('manual');m.textContent='ALL DATA CLEARED';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
@@ -6414,6 +6502,7 @@ function exportJSON(){
     breakLog:S.breakLog,
     pto:S.pto,
     shiftTimes:S.shiftTimes,
+    lastFabAccount:S.lastFabAccount,
     exportedAt:new Date().toISOString()};
   const json=JSON.stringify(bundle,null,2);
   if(navigator.clipboard)navigator.clipboard.writeText(json).catch(()=>{});
@@ -6429,7 +6518,7 @@ function exportCSV(){
     const sec=Object.values(dm).reduce((a,b)=>a+b,0);
     const ptoSec=S.pto[wk]?Object.values(S.pto[wk]).reduce((a,b)=>a+b,0):0;
     const totalHrs=(sec+ptoSec)/3600;
-    const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
+    const cg=csInWeek(wk);
     const g=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wk),S.pto[wk]);
     const ded=g-applyDed(g,S.deductions),net=g-ded;
     const pc=S.paychecks[wk];
@@ -6440,7 +6529,7 @@ function exportCSV(){
     const wk=localStr(getWeekStart(parseLocal(cs.date),S.schedule.weekStartDay,S.schedule.weekStartTime));
     if(seenWks.has(wk))continue;
     seenWks.add(wk);
-    const cg=csInWeek(wk).reduce((s,c)=>s+csGross(c),0);
+    const cg=csInWeek(wk);
     const ptoSec=S.pto[wk]?Object.values(S.pto[wk]).reduce((a,b)=>a+b,0):0;
     const ptoEarn=(ptoSec/3600)*rate;
     const g=cg+ptoEarn;
@@ -6493,6 +6582,7 @@ function importJSON(){
     if(bundle.breakLog){S.breakLog=bundle.breakLog;lsSet('break_log_v1',S.breakLog);}
     if(bundle.pto){S.pto=bundle.pto;lsSet('pto_v1',S.pto);}
     if(bundle.shiftTimes){S.shiftTimes=bundle.shiftTimes;lsSet('shift_times_v1',S.shiftTimes);}
+    if(bundle.lastFabAccount!=null){S.lastFabAccount=bundle.lastFabAccount;lsSet('last_fab_account_v1',S.lastFabAccount);}
     applyTheme();
     showToast(true);closeDataPanel();render();
   }catch(e){const ti=document.getElementById('save-toast'),mi=document.getElementById('toast-msg');if(ti&&mi){ti.classList.remove('manual');ti.classList.add('manual');mi.textContent='Import failed — invalid JSON';ti.classList.add('show');setTimeout(()=>ti.classList.remove('show'),4000);}}
@@ -6575,7 +6665,19 @@ function saveFabShift(){
 
 let _fabExpCat='custom';
 function fabExpCat(c){_fabExpCat=c;renderFabExpense(document.getElementById('fab-panel'));}
+function fabSetAcct(id){
+  S.lastFabAccount=id;
+  save('lastFabAccount');
+  renderFabExpense(document.getElementById('fab-panel'));
+}
 function renderFabExpense(panel){
+  // Deductible accounts: checking + savings assets
+  const acctAssets=S.assets.filter(a=>a.type==='checking'||a.type==='savings');
+  // Auto-pick default on first open: remembered > first checking > first savings
+  if(S.lastFabAccount===''&&acctAssets.length){
+    const defChk=acctAssets.find(a=>a.type==='checking');
+    S.lastFabAccount=(defChk||acctAssets[0]).id;
+  }
   let h='<div style="margin-bottom:6px">';
   h+='<div class="flex" style="justify-content:space-between;align-items:center;margin-bottom:12px">';
   h+='<div class="label" style="margin:0;color:var(--red)">\u2212$ Quick Expense</div>';
@@ -6593,6 +6695,18 @@ function renderFabExpense(panel){
     h+='<button class="chip'+(act?' active':'')+'" style="'+(act?'border-color:'+c.color+';background:'+c.color+'22;color:'+c.color:'color:var(--mut)')+'" onclick="fabExpCat(&quot;'+c.id+'&quot;)">'+c.icon+' '+c.label+'</button>';
   }
   h+='</div>';
+  if(acctAssets.length){
+    h+='<div class="label2">Deduct from Account</div>';
+    h+='<div class="chips mb10">';
+    const noneAct=!S.lastFabAccount;
+    h+='<button class="chip'+(noneAct?' active':'')+'" style="'+(noneAct?'border-color:var(--mut);background:var(--surf2);color:var(--txt)':'color:var(--mut)')+'" onclick="fabSetAcct(&quot;&quot;)">None</button>';
+    for(const a of acctAssets){
+      const act2=S.lastFabAccount===a.id;
+      const tc=a.type==='checking'?'#5baae8':'#4dba6e';
+      h+='<button class="chip'+(act2?' active':'')+'" style="'+(act2?'border-color:'+tc+';background:'+tc+'22;color:'+tc:'color:var(--mut)')+'" onclick="fabSetAcct(&quot;'+a.id+'&quot;)">'+a.label+' \u2014 '+fmt$(parseFloat(a.value)||0)+'</button>';
+    }
+    h+='</div>';
+  }
   h+='<div class="flex gap8">';
   h+='<button class="btn-acc f1" onclick="saveFabExpense()">Add Expense</button>';
   h+='<button class="btn-ghost" onclick="closeFabPanel()">Cancel</button>';
@@ -6606,13 +6720,16 @@ function saveFabExpense(){
   const txId=Date.now().toString();
   S.transactions=[...S.transactions,{id:txId,date:todayStr(),description:desc,amount:-Math.abs(amt),category:_fabExpCat,type:'purchase',imported:false}];
   save('transactions');
-  S.expenses=[...S.expenses,{id:'fab-'+txId,label:desc,category:_fabExpCat,customCategory:'',amount:String(Math.abs(amt)),frequency:'one-time',oneTimeDate:todayStr(),dayOfMonth:'',active:true,paid:true,archived:false,accountId:''}];
+  S.expenses=[...S.expenses,{id:'fab-'+txId,label:desc,category:_fabExpCat,customCategory:'',amount:String(Math.abs(amt)),frequency:'one-time',oneTimeDate:todayStr(),dayOfMonth:'',active:true,paid:true,archived:false,accountId:S.lastFabAccount||''}];
   save('expenses');
-  const chk=S.assets.find(a=>a.type==='checking');
-  if(chk){
-    const prev=parseFloat(chk.value)||0;
-    S.assets=S.assets.map(a=>a.id===chk.id?{...a,prevValue:String(prev),value:String(prev-Math.abs(amt)),updatedDate:todayStr()}:a);
-    save('assets');
+  // Deduct from chosen account if selected
+  if(S.lastFabAccount){
+    const acct=S.assets.find(a=>a.id===S.lastFabAccount);
+    if(acct){
+      const prev=parseFloat(acct.value)||0;
+      S.assets=S.assets.map(a=>a.id===acct.id?{...a,prevValue:String(prev),value:String(prev-Math.abs(amt)),updatedDate:todayStr()}:a);
+      save('assets');
+    }
   }
   _fabExpCat='custom';
   closeFabPanel();showToast(true);
