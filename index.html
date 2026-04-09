@@ -2815,7 +2815,8 @@ function renderHistoryTab(rate){
     if(!logWkKeys.has(wk)){
       const cg=csInWeek(wk);
       const _ptoG=S.pto[wk]?Object.values(S.pto[wk]).reduce((s,sec)=>s+(sec/3600)*rate,0):0;
-      logWks.push({key:wk,totalSec:0,gross:cg+_ptoG});
+      const _csG=cg.reduce((s,c)=>s+csGross(c),0);
+      logWks.push({key:wk,totalSec:0,gross:_csG+_ptoG});
       logWkKeys.add(wk);
     }
   }
@@ -2882,7 +2883,7 @@ function renderHistoryTab(rate){
     tabContent=allWks.slice(0,20).map(w=>{
       const d=parseLocal(w.key),ded=w.gross-applyDed(w.gross,S.deductions),net=w.gross-ded,cur=w.key===curWk;
       const cg=csInWeek(w.key);
-      const isExp=S.expandedWk===w.key;
+      const cgAmt=cg.reduce((s,c)=>s+csGross(c),0);
       const pc=S.paychecks[w.key];
       const estNet=applyDed(w.gross,S.deductions);
       const pcDiff=pc?.amount?(pc.amount-estNet):null;
@@ -2977,7 +2978,7 @@ function renderHistoryTab(rate){
             <div class="flex gap14 mt4" style="font-size:10px">
               <span class="mut">Gross <span style="color:var(--txt)">${fmt$(w.gross)}</span></span>
               ${ded>0?`<span class="mut">Ded <span style="color:var(--red)">−${fmt$(ded)}</span></span>`:''}
-              ${cg>0?`<span class="mut">Custom <span style="color:var(--pur)">${fmt$(cg)}</span></span>`:''}
+              ${cgAmt>0?`<span class="mut">Custom <span style="color:var(--pur)">${fmt$(cgAmt)}</span></span>`:''}
               ${(()=>{const wp=S.pto[w.key];if(!wp)return'';const pt=Object.values(wp).reduce((s,sec)=>s+(sec/3600)*(parseFloat(S.schedule.hourlyRate)||0),0);return pt>0?'<span class="mut">PTO <span style="color:var(--blu)">'+fmt$(pt)+'</span></span>':'';})()}
               ${pc?.amount?`<span style="color:${pcDiff>=0?'var(--grn)':'var(--red)'}">Actual ${fmt$(pc.amount)}</span>`:''}
             </div>
@@ -3142,7 +3143,7 @@ function showPayStub(wkStr){
   const oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
   const dm=S.log[wkStr]||{};
   const cg=csInWeek(wkStr);
-  const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkStr),S.pto[wkStr]);
+  const cgAmt=cg.reduce((s,c)=>s+csGross(c),0);
   const ded=S.deductions;
   const d=parseLocal(wkStr);
   const we=wkEnd(parseLocal(wkStr));
@@ -3168,7 +3169,7 @@ function showPayStub(wkStr){
       <span style="font-size:11px;color:var(--mut)">Gross Earnings</span><span style="font-size:14px;font-weight:bold">${fmt$(gross)}</span>
     </div>
     ${Object.entries(dm).map(([dk,sec])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10px;color:var(--mut)"><span>${dk} (${(sec/3600).toFixed(2)}h)</span><span>${fmt$(calcEarnings(sec,rate,oa,om))}</span></div>`).join('')}
-    ${cg>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10px;color:var(--pur)"><span>Custom shifts</span><span>${fmt$(cg)}</span></div>`:''}
+    ${cgAmt>0?`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10px;color:var(--pur)"><span>Custom shifts</span><span>${fmt$(cgAmt)}</span></div>`:''}
     ${(()=>{const wp=S.pto[wkStr];if(!wp)return'';const ptoSec=Object.values(wp).reduce((s,v)=>s+v,0);const ptoEarn=(ptoSec/3600)*rate;return'<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:10px;color:var(--blu)"><span>☂ PTO ('+Math.floor(ptoSec/3600)+'h'+(ptoSec%3600>0?' '+Math.round((ptoSec%3600)/60)+'m':'')+')</span><span>'+fmt$(ptoEarn)+'</span></div>';})()}
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--bdr)">
       <div style="font-size:8px;letter-spacing:2px;color:var(--mut);margin-bottom:8px">DEDUCTIONS</div>
@@ -6532,7 +6533,7 @@ function exportCSV(){
     const cg=csInWeek(wk);
     const ptoSec=S.pto[wk]?Object.values(S.pto[wk]).reduce((a,b)=>a+b,0):0;
     const ptoEarn=(ptoSec/3600)*rate;
-    const g=cg+ptoEarn;
+    const g=cg.reduce((s,c)=>s+csGross(c),0)+ptoEarn;
     const ded=g-applyDed(g,S.deductions),net=g-ded;
     const pc=S.paychecks[wk];
     rows.push([wk,(ptoSec/3600).toFixed(2),g.toFixed(2),ded.toFixed(2),net.toFixed(2),pc?.amount||'',pc?.date||'',pc?.amount?(pc.amount-net).toFixed(2):'']);
