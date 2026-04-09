@@ -2887,6 +2887,7 @@ function renderHistoryTab(rate){
       const pc=S.paychecks[w.key];
       const estNet=applyDed(w.gross,S.deductions);
       const pcDiff=pc?.amount?(pc.amount-estNet):null;
+      const isExp=S.expandedWk===w.key;
       let dayRows='';
       if(isExp){
         const dayEntries=Object.entries(S.log[w.key]||{}).sort((a,b)=>a[0].localeCompare(b[0]));
