@@ -2931,6 +2931,12 @@ function renderHistoryTab(rate){
         const logDaySet=new Set(logDays.map(([dk])=>dk));
         const csOnlyDays=csForWk.filter(c=>!logDaySet.has(c.date)).map(c=>[c.date,0]);
         const allDayEntries=[...logDays,...csOnlyDays].sort((a,b)=>a[0].localeCompare(b[0]));
+        // For week-mode OT: track cumulative seconds so each day shows marginal OT
+        let _priorSecCum=0;
+        if(otMode==='week'){
+          // Pre-seed with hourly CS seconds for days that sort before any log entries
+          // (handled inline as we iterate)
+        }
         dayRows=allDayEntries.map(([dk,sec])=>{
           const dd=parseLocal(dk);
           const csOnDay=csForWk.filter(c=>c.date===dk);
@@ -2942,7 +2948,19 @@ function renderHistoryTab(rate){
           const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
           const grossSec=effectiveSec+breakSec;
           const csEarn=csOnDay.reduce((s,c)=>s+csGross(c),0);
-          const dg=isCS?csEarn:calcEarnings(sec,rate,oa,om);
+          let dg;
+          if(isCS&&csOnDay[0].type==='hourly'&&otMode==='week'){
+            // Hourly CS in week-mode: marginal OT contribution
+            dg=calcEarnings(_priorSecCum+csSec,rate,oa,om)-calcEarnings(_priorSecCum,rate,oa,om);
+            _priorSecCum+=csSec;
+          }else if(isCS){
+            dg=csEarn;
+          }else if(otMode==='week'){
+            dg=calcEarnings(_priorSecCum+sec,rate,oa,om)-calcEarnings(_priorSecCum,rate,oa,om);
+            _priorSecCum+=sec;
+          }else{
+            dg=calcEarnings(sec,rate,oa,om);
+          }
           const sh=S.schedule.shifts[dd.getDay()];
           const savedStart=(S.shiftTimes[w.key]&&S.shiftTimes[w.key][dk])||'';
           const csStart=csOnDay.length===1?csOnDay[0].start||'':'';
@@ -2969,9 +2987,13 @@ function renderHistoryTab(rate){
           h+='<span style="font-size:10px;color:var(--mut)">'+dk+'</span>';
           if(isCS)h+='<span style="font-size:7px;letter-spacing:1px;color:var(--pur);background:rgba(168,130,255,.15);padding:1px 5px;border-radius:3px">CUSTOM</span>';
           if(isLiveDay)h+='<span style="font-size:8px;color:var(--grn);letter-spacing:1px">LIVE</span>';
+          const _dayInOT=otMode==='week'&&_priorSecCum>(parseFloat(oa)||Infinity)*3600;
+          const _dayPartialOT=otMode==='week'&&!_dayInOT&&(_priorSecCum>(parseFloat(oa)||Infinity)*3600-effectiveSec);
+          if(_dayInOT)h+='<span style="font-size:7px;letter-spacing:1px;color:var(--org);background:rgba(255,173,107,.15);padding:1px 5px;border-radius:3px">OT</span>';
+          else if(_dayPartialOT&&!isCS)h+='<span style="font-size:7px;letter-spacing:1px;color:var(--org);background:rgba(255,173,107,.1);padding:1px 5px;border-radius:3px">PARTIAL OT</span>';
           h+='</div>';
           h+='<div class="flex" style="align-items:center;gap:8px">';
-          h+='<span style="font-size:14px;color:'+(isCS?'var(--pur)':'var(--acc)')+';font-weight:bold">'+fmt$(dg)+'</span>';
+          h+='<span style="font-size:14px;color:'+(isCS?'var(--pur)':(_dayInOT||_dayPartialOT)?'var(--org)':'var(--acc)')+';font-weight:bold">'+fmt$(dg)+'</span>';
           if(isCS){h+='<button class="btn-sm btn-red" onclick="deleteCS(\''+csOnDay[0].id+'\')">✕</button>';}
           else{h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';}
           h+='</div>';
