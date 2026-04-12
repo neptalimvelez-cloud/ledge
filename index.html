@@ -1154,10 +1154,15 @@ function loadState(){
     const today=dayKey(new Date());
     const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
     const yestKey=dayKey(yesterday);
-    if(ps.dayKey===today){
+    // Check if there's a currently active shift whose date matches the saved pause dayKey
+    // (handles overnight shifts where dayKey is yesterday but shift is still live)
+    const _loadShift=getActiveShift(new Date());
+    const _loadShiftDk=_loadShift?dayKey(_loadShift.date):null;
+    if(ps.dayKey===today||ps.dayKey===_loadShiftDk){
+      // Today or active overnight shift — fully restore pause state including breaks
       S.pause={...ps,breakLog:ps.breakLog||[]};
     }else if(ps.dayKey===yestKey){
-      // Yesterday's pause: keep paused state but clear break log (already committed or stale)
+      // Yesterday's pause, no active shift matching — stale, clear break data
       S.pause={...ps,breakLog:[],accBreakSec:0,onBreak:false,breakStart:null};
     }
   }
@@ -2574,6 +2579,14 @@ function handleBreak(){
     S.pause={...p,onBreak:false,breakStart:null,accBreakSec:(p.accBreakSec||0)+elapsed,dayKey:dk,breakLog:log};
   }
   save('pause');
+  // Immediately commit breaks to persistent breakLog so they survive app restart
+  if(!S.pause.onBreak&&S.pause.breakLog?.length){
+    const activeShift2=getActiveShift(new Date());
+    if(activeShift2){
+      const ws2=getWeekStart(activeShift2.date,S.schedule.weekStartDay,S.schedule.weekStartTime);
+      commitBreakLog(localStr(ws2),dk);
+    }
+  }
   // Re-render to show updated break list immediately
   if(S.app==='tracker'&&S.trackerTab==='tracker')render();
 }
@@ -2587,6 +2600,12 @@ function quickBreak(mins){
   const log=[...(S.pause.breakLog||[]),{id:Date.now().toString(),type:'quick',sec:sec,label:mins+'m',time:now}];
   S.pause={...S.pause,accBreakSec:(S.pause.accBreakSec||0)+sec,dayKey:dk,breakLog:log};
   save('pause');
+  // Immediately commit breaks to persistent breakLog so they survive app restart
+  const _qbShift=getActiveShift(new Date());
+  if(_qbShift){
+    const _qbWs=getWeekStart(_qbShift.date,S.schedule.weekStartDay,S.schedule.weekStartTime);
+    commitBreakLog(localStr(_qbWs),dk);
+  }
   // Re-render to show updated break list immediately
   if(S.app==='tracker'&&S.trackerTab==='tracker')render();
 }
