@@ -2890,16 +2890,28 @@ function renderHistoryTab(rate){
       const isExp=S.expandedWk===w.key;
       let dayRows='';
       if(isExp){
-        const dayEntries=Object.entries(S.log[w.key]||{}).sort((a,b)=>a[0].localeCompare(b[0]));
-        dayRows=dayEntries.map(([dk,sec])=>{
+        // Merge log entries + custom-shift-only dates into unified day list
+        const logDays=Object.entries(S.log[w.key]||{});
+        const csForWk=csInWeek(w.key);
+        const logDaySet=new Set(logDays.map(([dk])=>dk));
+        const csOnlyDays=csForWk.filter(c=>!logDaySet.has(c.date)).map(c=>[c.date,0]);
+        const allDayEntries=[...logDays,...csOnlyDays].sort((a,b)=>a[0].localeCompare(b[0]));
+        dayRows=allDayEntries.map(([dk,sec])=>{
           const dd=parseLocal(dk);
+          const csOnDay=csForWk.filter(c=>c.date===dk);
+          const isCS=csOnDay.length>0;
+          const csHours=csOnDay.reduce((s,c)=>s+(parseFloat(c.hours)||0),0);
+          const csSec=csHours*3600;
+          const effectiveSec=isCS?(sec||csSec):sec;
           const breaks=(S.breakLog[w.key]&&S.breakLog[w.key][dk])||[];
           const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
-          const grossSec=sec+breakSec;
-          const dg=calcEarnings(sec,rate,oa,om);
+          const grossSec=effectiveSec+breakSec;
+          const csEarn=csOnDay.reduce((s,c)=>s+csGross(c),0);
+          const dg=isCS?csEarn:calcEarnings(sec,rate,oa,om);
           const sh=S.schedule.shifts[dd.getDay()];
           const savedStart=(S.shiftTimes[w.key]&&S.shiftTimes[w.key][dk])||'';
-          const shStart=savedStart||sh?.start||'';
+          const csStart=csOnDay.length===1?csOnDay[0].start||'':'';
+          const shStart=savedStart||csStart||sh?.start||'';
           // Derive end time from scheduled start + gross seconds (net + breaks)
           let shEnd='';
           if(shStart&&grossSec>0){
@@ -2918,17 +2930,21 @@ function renderHistoryTab(rate){
           h+='<div style="padding:10px 0;border-bottom:1px solid var(--bdr)">';
           h+='<div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:6px">';
           h+='<div class="flex" style="align-items:baseline;gap:6px">';
-          h+='<span style="font-size:12px;font-weight:600;color:var(--txt)">'+DAYS[dd.getDay()]+'</span>';
+          h+='<span style="font-size:12px;font-weight:600;color:'+(isCS?'var(--pur)':'var(--txt)')+'">'+DAYS[dd.getDay()]+'</span>';
           h+='<span style="font-size:10px;color:var(--mut)">'+dk+'</span>';
+          if(isCS)h+='<span style="font-size:7px;letter-spacing:1px;color:var(--pur);background:rgba(168,130,255,.15);padding:1px 5px;border-radius:3px">CUSTOM</span>';
           if(isLiveDay)h+='<span style="font-size:8px;color:var(--grn);letter-spacing:1px">LIVE</span>';
           h+='</div>';
           h+='<div class="flex" style="align-items:center;gap:8px">';
-          h+='<span style="font-size:14px;color:var(--acc);font-weight:bold">'+fmt$(dg)+'</span>';
-          h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';
+          h+='<span style="font-size:14px;color:'+(isCS?'var(--pur)':'var(--acc)')+';font-weight:bold">'+fmt$(dg)+'</span>';
+          if(isCS){h+='<button class="btn-sm btn-red" onclick="deleteCS(\''+csOnDay[0].id+'\')">✕</button>';}
+          else{h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';}
           h+='</div>';
           h+='</div>';
           if(isLiveDay){
             h+='<div style="font-size:9px;color:var(--mut);margin-bottom:6px">Times locked while shift is active</div>';
+          }else if(isCS&&csOnDay[0].type==='flat'){
+            // Flat custom shifts — no time range
           }else{
           h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:6px">';
           h+='<input id="hdt-start-'+dk+'" type="time" value="'+shStart+'" oninput="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
@@ -2938,9 +2954,16 @@ function renderHistoryTab(rate){
           h+='</div>';
           }
           h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">';
-          h+='<span>'+(grossSec/3600).toFixed(2)+'h gross</span>';
-          if(breakSec>0)h+=' &minus; <span style="color:var(--org)">'+fmtTime(breakSec)+' breaks</span> = <span style="color:var(--grn);font-weight:600">'+(sec/3600).toFixed(2)+'h net</span>';
-          else h+=' = <span style="color:var(--grn);font-weight:600">'+(sec/3600).toFixed(2)+'h net</span>';
+          if(isCS&&csOnDay[0].type==='flat'){
+            h+='<span style="color:var(--pur)">Flat pay</span>';
+            if(csOnDay[0].label)h+=' &middot; <span>'+csOnDay[0].label+'</span>';
+          }else{
+            h+='<span>'+(grossSec/3600).toFixed(2)+'h gross</span>';
+            if(breakSec>0)h+=' &minus; <span style="color:var(--org)">'+fmtTime(breakSec)+' breaks</span> = <span style="color:var(--grn);font-weight:600">'+(effectiveSec/3600).toFixed(2)+'h net</span>';
+            else h+=' = <span style="color:var(--grn);font-weight:600">'+(effectiveSec/3600).toFixed(2)+'h net</span>';
+            if(isCS&&csOnDay[0].label)h+=' &middot; <span style="color:var(--pur)">'+csOnDay[0].label+'</span>';
+            if(isCS)h+=' &middot; <span style="color:var(--pur)">$'+parseFloat(csOnDay[0].rate).toFixed(2)+'/hr</span>';
+          }
           h+='</div>';
           if(breaks.length){
             h+='<div style="margin-top:6px">';
@@ -3129,13 +3152,6 @@ function renderHistoryTab(rate){
     </div>
     ${_hFormOpen?renderHistFormHTML():''}
     ${tabContent}
-    ${S.customShifts.length&&mode==='weeks'?`<div class="mt20">
-      <div class="label">All Custom Shifts</div>
-      ${[...S.customShifts].sort((a,b)=>b.date.localeCompare(a.date)).map(c=>`<div class="flex" style="align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surf);margin-bottom:6px;border-left:2px solid var(--pur)">
-        <div><div style="font-size:12px">${c.label||'Custom Shift'}</div><div style="font-size:9px;color:var(--mut);margin-top:2px">${c.date} · ${c.type==='hourly'?`${c.hours}h @ $${parseFloat(c.rate).toFixed(2)}/hr`:'Flat pay'}</div></div>
-        <div class="right"><div style="font-size:14px;font-weight:bold;color:var(--pur)">${fmt$(csGross(c))}</div><button class="btn-sm" style="color:var(--mut)" onclick="deleteCS('${c.id}')">Remove</button></div>
-      </div>`).join('')}
-    </div>`:''}
   </div>`;
 }
 
@@ -3215,10 +3231,22 @@ function applyHistDayEdit(wk,dk){
   const breaks=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
   const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
   const netSec=Math.max(0,grossSec-breakSec);
-  S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
+  // Check for hourly custom shift on this day — update it instead of S.log
+  const csMatch=S.customShifts.find(c=>c.date===dk&&c.type==='hourly');
+  if(csMatch){
+    const grossHrs=(grossSec/3600);
+    const brkMins=Math.round(breakSec/60);
+    csMatch.start=startVal;
+    csMatch.end=endVal;
+    csMatch.breakMins=String(brkMins);
+    csMatch.hours=String(Math.max(0,grossHrs-(brkMins/60)).toFixed(4));
+    save('customShifts');
+  }else{
+    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
+    save('log');
+  }
   S.shiftTimes={...S.shiftTimes,[wk]:{...(S.shiftTimes[wk]||{}),[dk]:startVal}};
   save('shiftTimes');
-  save('log');
   delete _hdtEnd[dk];
   delete _hdtStart[dk];
   renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
