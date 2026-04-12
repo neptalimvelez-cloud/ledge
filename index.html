@@ -1320,7 +1320,6 @@ function getLiveEarned(){
   const thisWk=S.log[wk]||{};
   const priorSec=Object.entries(thisWk).reduce((s,[k,v])=>k===todayDk?s:s+v,0);
   const covDays=csCoveredDays(wk);
-  if(covDays.has(todayDk))return csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
   const oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
   const csHrSecLive=csInWeek(wk).filter(c=>c.type==='hourly'&&c.date!==todayDk).reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
   const priorPool=priorSec+csHrSecLive;
@@ -1885,7 +1884,7 @@ function tickTracker(){
   const priorPool=priorSec+csHrSecTick;
 
   let earned=0;
-  if(todayCov) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
+  if(todayCov&&!shift) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
   else if(otMode==='week')earned=calcEarnings(priorPool+netSec,rate,oa,om)-calcEarnings(priorPool,rate,oa,om);
   else earned=calcEarnings(netSec,rate,oa,om);
 
@@ -1994,7 +1993,7 @@ function renderTrackerTab(now,rate,ws,wk){
   const csHrSecWk=thisCsG.filter(c=>c.type==='hourly'&&c.date!==todayDk).reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
   const priorPool=priorSec+csHrSecWk;
   let earned=0;
-  if(todayIsCovered) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
+  if(todayIsCovered&&!shift) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
   else if(otMode==='week')earned=calcEarnings(priorPool+netSec,rate,oa,om)-calcEarnings(priorPool,rate,oa,om);
   else earned=calcEarnings(netSec,rate,oa,om);
   const ot=otMode==='week'?
