@@ -1322,7 +1322,9 @@ function getLiveEarned(){
   const covDays=csCoveredDays(wk);
   if(covDays.has(todayDk))return csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
   const oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
-  if(otMode==='week')return calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
+  const csHrSecLive=csInWeek(wk).filter(c=>c.type==='hourly'&&c.date!==todayDk).reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
+  const priorPool=priorSec+csHrSecLive;
+  if(otMode==='week')return calcEarnings(priorPool+netSec,rate,oa,om)-calcEarnings(priorPool,rate,oa,om);
   return calcEarnings(netSec,rate,oa,om);
 }
 function weekGross(dayMap,skipDk,liveSec,rate,otA,otM,otMode,csGrossAmt,coveredDays,ptoMap){
@@ -1877,14 +1879,18 @@ function tickTracker(){
   const priorSec=Object.entries(thisWk).reduce((s,[k,v])=>k===todayDk?s:s+v,0);
   const covDays=csCoveredDays(wk);
   const todayCov=covDays.has(todayDk);
+  // Include hourly CS hours (not on today) in prior pool for week-mode OT
+  const csForWkTick=csInWeek(wk);
+  const csHrSecTick=csForWkTick.filter(c=>c.type==='hourly'&&c.date!==todayDk).reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
+  const priorPool=priorSec+csHrSecTick;
 
   let earned=0;
   if(todayCov) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
-  else if(otMode==='week')earned=calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
+  else if(otMode==='week')earned=calcEarnings(priorPool+netSec,rate,oa,om)-calcEarnings(priorPool,rate,oa,om);
   else earned=calcEarnings(netSec,rate,oa,om);
 
   const ot=otMode==='week'?
-    {inOT:(priorSec+netSec)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorSec+netSec)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
+    {inOT:(priorPool+netSec)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorPool+netSec)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
     {inOT:netSec/3600>(parseFloat(oa)||Infinity),otHours:Math.max(0,netSec/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)};
 
   const el=document.getElementById('live-earned');if(el)el.textContent=fmt$(earned);
@@ -1908,9 +1914,9 @@ function tickTracker(){
   // weekly OT bar
   if(S.schedule.overtimeMode==='week'&&S.schedule.overtimeAfter){
     const otAfterSec=(parseFloat(S.schedule.overtimeAfter)||0)*3600;
-    const wpct=Math.min(100,((priorSec+netSec)/otAfterSec)*100);
+    const wpct=Math.min(100,((priorPool+netSec)/otAfterSec)*100);
     const wb=document.getElementById('week-ot-bar');if(wb){wb.style.width=wpct+'%';wb.style.background=ot.inOT?'var(--org)':'var(--blu)';}
-    const wt=document.getElementById('week-ot-txt');if(wt)wt.textContent=`${((priorSec+netSec)/3600).toFixed(1)}h / ${S.schedule.overtimeAfter}h${ot.inOT?' · IN OT':''}`;
+    const wt=document.getElementById('week-ot-txt');if(wt)wt.textContent=`${((priorPool+netSec)/3600).toFixed(1)}h / ${S.schedule.overtimeAfter}h${ot.inOT?' · IN OT':''}`;
   }
 
   // dot badge
@@ -1984,14 +1990,15 @@ function renderTrackerTab(now,rate,ws,wk){
   const thisCsGrossAmt=thisCsG.reduce((s,c)=>s+csGross(c),0);
   const coveredDays=csCoveredDays(wk);
   const todayIsCovered=coveredDays.has(todayDk);
+  // Include hourly CS hours (not on today) in prior pool for week-mode OT
+  const csHrSecWk=thisCsG.filter(c=>c.type==='hourly'&&c.date!==todayDk).reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
+  const priorPool=priorSec+csHrSecWk;
   let earned=0;
   if(todayIsCovered) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
-  else if(otMode==='week')earned=calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
+  else if(otMode==='week')earned=calcEarnings(priorPool+netSec,rate,oa,om)-calcEarnings(priorPool,rate,oa,om);
   else earned=calcEarnings(netSec,rate,oa,om);
-  // Include hourly CS hours in OT pool for week-mode OT indicator
-  const csHrSecWk=thisCsG.filter(c=>c.type==='hourly').reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
   const ot=otMode==='week'?
-    {inOT:(priorSec+netSec+csHrSecWk)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorSec+netSec+csHrSecWk)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
+    {inOT:(priorPool+netSec)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorPool+netSec)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
     {inOT:netSec/3600>(parseFloat(oa)||Infinity),otHours:Math.max(0,netSec/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)};
 
   const totalNetSec=priorSec+(shift?netSec:(thisWk[todayDk]||0));
@@ -2058,9 +2065,9 @@ function renderTrackerTab(now,rate,ws,wk){
       ${otMode==='week'&&oa?`
       <div style="margin-top:8px">
         <div class="flex" style="justify-content:space-between;font-size:8px;color:var(--mut);margin-bottom:5px">
-          <span>WEEKLY HOURS</span><span id="week-ot-txt">${((priorSec+netSec)/3600).toFixed(1)}h / ${oa}h${ot.inOT?' · IN OT':''}</span>
+          <span>WEEKLY HOURS</span><span id="week-ot-txt">${((priorPool+netSec)/3600).toFixed(1)}h / ${oa}h${ot.inOT?' · IN OT':''}</span>
         </div>
-        <div class="bar-wrap"><div class="bar-fill" id="week-ot-bar" style="width:${Math.min(100,((priorSec+netSec)/(parseFloat(oa)*3600))*100)}%;background:${ot.inOT?'var(--org)':'var(--blu)'}"></div></div>
+        <div class="bar-wrap"><div class="bar-fill" id="week-ot-bar" style="width:${Math.min(100,((priorPool+netSec)/(parseFloat(oa)*3600))*100)}%;background:${ot.inOT?'var(--org)':'var(--blu)'}"></div></div>
       </div>`:''}
       ${S.schedule.breakRules?.length?`
       <div class="flex gap6 mt10" style="flex-wrap:wrap">
