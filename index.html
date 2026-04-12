@@ -1154,16 +1154,26 @@ function loadState(){
     const today=dayKey(new Date());
     const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
     const yestKey=dayKey(yesterday);
-    // Check if there's a currently active shift whose date matches the saved pause dayKey
-    // (handles overnight shifts where dayKey is yesterday but shift is still live)
     const _loadShift=getActiveShift(new Date());
     const _loadShiftDk=_loadShift?dayKey(_loadShift.date):null;
     if(ps.dayKey===today||ps.dayKey===_loadShiftDk){
-      // Today or active overnight shift — fully restore pause state including breaks
       S.pause={...ps,breakLog:ps.breakLog||[]};
     }else if(ps.dayKey===yestKey){
-      // Yesterday's pause, no active shift matching — stale, clear break data
       S.pause={...ps,breakLog:[],accBreakSec:0,onBreak:false,breakStart:null};
+    }
+    // Always commit any pending breaks from restored pause into persistent breakLog
+    if(S.pause.breakLog?.length&&S.pause.dayKey){
+      const _psDk=S.pause.dayKey;
+      const _psDate=parseLocal(_psDk);
+      const _psWs=getWeekStart(_psDate,S.schedule.weekStartDay,S.schedule.weekStartTime);
+      const _psWk=localStr(_psWs);
+      const existing=(S.breakLog[_psWk]&&S.breakLog[_psWk][_psDk])||[];
+      const ids=new Set(existing.map(b=>b.id));
+      const newBrks=S.pause.breakLog.filter(b=>!ids.has(b.id));
+      if(newBrks.length){
+        S.breakLog={...S.breakLog,[_psWk]:{...(S.breakLog[_psWk]||{}),[_psDk]:[...existing,...newBrks]}};
+        lsSet('break_log_v1',S.breakLog);
+      }
     }
   }
   // On load: remove log entries only for the specific dates covered by custom shifts
