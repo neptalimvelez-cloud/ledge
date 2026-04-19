@@ -1154,26 +1154,11 @@ function loadState(){
     const today=dayKey(new Date());
     const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
     const yestKey=dayKey(yesterday);
-    const _loadShift=getActiveShift(new Date());
-    const _loadShiftDk=_loadShift?dayKey(_loadShift.date):null;
-    if(ps.dayKey===today||ps.dayKey===_loadShiftDk){
+    if(ps.dayKey===today){
       S.pause={...ps,breakLog:ps.breakLog||[]};
     }else if(ps.dayKey===yestKey){
+      // Yesterday's pause: keep paused state but clear break log (already committed or stale)
       S.pause={...ps,breakLog:[],accBreakSec:0,onBreak:false,breakStart:null};
-    }
-    // Always commit any pending breaks from restored pause into persistent breakLog
-    if(S.pause.breakLog?.length&&S.pause.dayKey){
-      const _psDk=S.pause.dayKey;
-      const _psDate=parseLocal(_psDk);
-      const _psWs=getWeekStart(_psDate,S.schedule.weekStartDay,S.schedule.weekStartTime);
-      const _psWk=localStr(_psWs);
-      const existing=(S.breakLog[_psWk]&&S.breakLog[_psWk][_psDk])||[];
-      const ids=new Set(existing.map(b=>b.id));
-      const newBrks=S.pause.breakLog.filter(b=>!ids.has(b.id));
-      if(newBrks.length){
-        S.breakLog={...S.breakLog,[_psWk]:{...(S.breakLog[_psWk]||{}),[_psDk]:[...existing,...newBrks]}};
-        lsSet('break_log_v1',S.breakLog);
-      }
     }
   }
   // On load: remove log entries only for the specific dates covered by custom shifts
@@ -1267,11 +1252,14 @@ function showToast(manual=true,msg=''){
 
 // ─── Math helpers ─────────────────────────────────────────────────────────────
 function fmt$(n,sign=false){
-  const s=Math.abs(n).toLocaleString('en-US',{style:'currency',currency:'USD'});
-  return(sign&&n>0?'+':sign&&n<0?'−':n<0?'−':'')+s;
+  const num=Number(n);
+  const safe=Number.isFinite(num)?num:0;
+  const s=Math.abs(safe).toLocaleString('en-US',{style:'currency',currency:'USD'});
+  return(sign&&safe>0?'+':sign&&safe<0?'−':safe<0?'−':'')+s;
 }
 function fmtTime(sec){
-  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=Math.floor(sec%60);
+  const n=Number.isFinite(sec)?Math.max(0,sec):0;
+  const h=Math.floor(n/3600),m=Math.floor((n%3600)/60),s=Math.floor(n%60);
   return`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 function toMin(t){const[h,m]=(t||'00:00').split(':').map(Number);return h*60+m;}
@@ -1293,8 +1281,11 @@ function getWeekStart(date,startDay,startTime){
 }
 function wkKey(date){return localStr(getWeekStart(date,S.schedule.weekStartDay,S.schedule.weekStartTime));}
 function wkEnd(ws){const we=new Date(ws);we.setDate(we.getDate()+7);we.setSeconds(we.getSeconds()-1);return we;}
-// Pay date = week end + 8 days - early deposit offset
-// Hours worked in one week are paid the following week (standard weekly payroll)
+// Pay date = week end + 6 days - early deposit offset
+// Hours worked in one week are paid the Friday of the FOLLOWING week
+// (standard weekly payroll: work Sun-Sat, get paystub next Fri, receive
+// via early-deposit N days before that Fri).
+// Example: work week Sun Nov 12 – Sat Nov 18, paystub Fri Nov 24, deposit Wed Nov 22 with 2-day early.
 // If a paycheck was actually received (S.paychecks[wkStr].date), use that instead
 function payDateForWeek(wkStr){
   const pc=S.paychecks[wkStr];
@@ -1302,7 +1293,7 @@ function payDateForWeek(wkStr){
   const ws=parseLocal(wkStr);
   const we=wkEnd(ws);
   const pd=new Date(we);
-  pd.setDate(pd.getDate()+8); // next week's payday (7 days after week end + 1)
+  pd.setDate(pd.getDate()+6);
   const offset=parseInt(S.earlyDepositDays)||0;
   pd.setDate(pd.getDate()-offset);
   return pd;
@@ -1335,10 +1326,9 @@ function getLiveEarned(){
   const thisWk=S.log[wk]||{};
   const priorSec=Object.entries(thisWk).reduce((s,[k,v])=>k===todayDk?s:s+v,0);
   const covDays=csCoveredDays(wk);
+  if(covDays.has(todayDk))return csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
   const oa=S.schedule.overtimeAfter,om=S.schedule.overtimeMultiplier,otMode=S.schedule.overtimeMode;
-  const csHrSecLive=csInWeek(wk).filter(c=>c.type==='hourly'&&c.date!==todayDk).reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
-  const priorPool=priorSec+csHrSecLive;
-  if(otMode==='week')return calcEarnings(priorPool+netSec,rate,oa,om)-calcEarnings(priorPool,rate,oa,om);
+  if(otMode==='week')return calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
   return calcEarnings(netSec,rate,oa,om);
 }
 function weekGross(dayMap,skipDk,liveSec,rate,otA,otM,otMode,csGrossAmt,coveredDays,ptoMap){
@@ -1893,18 +1883,14 @@ function tickTracker(){
   const priorSec=Object.entries(thisWk).reduce((s,[k,v])=>k===todayDk?s:s+v,0);
   const covDays=csCoveredDays(wk);
   const todayCov=covDays.has(todayDk);
-  // Include hourly CS hours (not on today) in prior pool for week-mode OT
-  const csForWkTick=csInWeek(wk);
-  const csHrSecTick=csForWkTick.filter(c=>c.type==='hourly'&&c.date!==todayDk).reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
-  const priorPool=priorSec+csHrSecTick;
 
   let earned=0;
-  if(todayCov&&!shift) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
-  else if(otMode==='week')earned=calcEarnings(priorPool+netSec,rate,oa,om)-calcEarnings(priorPool,rate,oa,om);
+  if(todayCov) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
+  else if(otMode==='week')earned=calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
   else earned=calcEarnings(netSec,rate,oa,om);
 
   const ot=otMode==='week'?
-    {inOT:(priorPool+netSec)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorPool+netSec)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
+    {inOT:(priorSec+netSec)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorSec+netSec)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
     {inOT:netSec/3600>(parseFloat(oa)||Infinity),otHours:Math.max(0,netSec/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)};
 
   const el=document.getElementById('live-earned');if(el)el.textContent=fmt$(earned);
@@ -1928,9 +1914,9 @@ function tickTracker(){
   // weekly OT bar
   if(S.schedule.overtimeMode==='week'&&S.schedule.overtimeAfter){
     const otAfterSec=(parseFloat(S.schedule.overtimeAfter)||0)*3600;
-    const wpct=Math.min(100,((priorPool+netSec)/otAfterSec)*100);
+    const wpct=Math.min(100,((priorSec+netSec)/otAfterSec)*100);
     const wb=document.getElementById('week-ot-bar');if(wb){wb.style.width=wpct+'%';wb.style.background=ot.inOT?'var(--org)':'var(--blu)';}
-    const wt=document.getElementById('week-ot-txt');if(wt)wt.textContent=`${((priorPool+netSec)/3600).toFixed(1)}h / ${S.schedule.overtimeAfter}h${ot.inOT?' · IN OT':''}`;
+    const wt=document.getElementById('week-ot-txt');if(wt)wt.textContent=`${((priorSec+netSec)/3600).toFixed(1)}h / ${S.schedule.overtimeAfter}h${ot.inOT?' · IN OT':''}`;
   }
 
   // dot badge
@@ -2004,15 +1990,14 @@ function renderTrackerTab(now,rate,ws,wk){
   const thisCsGrossAmt=thisCsG.reduce((s,c)=>s+csGross(c),0);
   const coveredDays=csCoveredDays(wk);
   const todayIsCovered=coveredDays.has(todayDk);
-  // Include hourly CS hours (not on today) in prior pool for week-mode OT
-  const csHrSecWk=thisCsG.filter(c=>c.type==='hourly'&&c.date!==todayDk).reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
-  const priorPool=priorSec+csHrSecWk;
   let earned=0;
-  if(todayIsCovered&&!shift) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
-  else if(otMode==='week')earned=calcEarnings(priorPool+netSec,rate,oa,om)-calcEarnings(priorPool,rate,oa,om);
+  if(todayIsCovered) earned=csInWeek(wk).filter(c=>c.date===todayDk).reduce((s,c)=>s+csGross(c),0);
+  else if(otMode==='week')earned=calcEarnings(priorSec+netSec,rate,oa,om)-calcEarnings(priorSec,rate,oa,om);
   else earned=calcEarnings(netSec,rate,oa,om);
+  // Include hourly CS hours in OT pool for week-mode OT indicator
+  const csHrSecWk=thisCsG.filter(c=>c.type==='hourly').reduce((s,c)=>s+(parseFloat(c.hours)||0)*3600,0);
   const ot=otMode==='week'?
-    {inOT:(priorPool+netSec)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorPool+netSec)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
+    {inOT:(priorSec+netSec+csHrSecWk)>(parseFloat(oa)||Infinity)*3600,otHours:Math.max(0,(priorSec+netSec+csHrSecWk)/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)}:
     {inOT:netSec/3600>(parseFloat(oa)||Infinity),otHours:Math.max(0,netSec/3600-(parseFloat(oa)||Infinity)),otRate:rate*(parseFloat(om)||1.5)};
 
   const totalNetSec=priorSec+(shift?netSec:(thisWk[todayDk]||0));
@@ -2024,14 +2009,17 @@ function renderTrackerTab(now,rate,ws,wk){
   const {projGross,futSec}=(()=>{
     let lm={...thisWk},fSec=0;
     const liveDk=shift?dayKey(shift.date):null;
+    const ptoDays=S.pto[wk]||{};
     for(let i=0;i<7;i++){
       const dow=(parseInt(S.schedule.weekStartDay||0)+i)%7,sh=S.schedule.shifts[dow];if(!sh?.active)continue;
       const dd=new Date(ws);dd.setDate(ws.getDate()+i);const dk=dayKey(dd);
       if(dk===liveDk){
         // This is the currently active shift — use live seconds
         lm[dk]=netSec;
-      } else if(!lm[dk]&&!coveredDays.has(dk)){
-        // No logged hours and not a custom shift — project full shift duration
+      } else if(!lm[dk]&&!coveredDays.has(dk)&&!ptoDays[dk]){
+        // No logged hours, not a custom shift, and NO PTO — project full shift duration
+        // PTO days are paid at base rate via ptoMap; projecting here would double-count
+        // and (incorrectly) push PTO hours into the weekly OT pool.
         const sm2=toMin(sh.start),em2=toMin(sh.end),dur=em2<sm2?em2+1440-sm2:em2-sm2;
         lm[dk]=dur*60;fSec+=dur*60;
       }
@@ -2079,9 +2067,9 @@ function renderTrackerTab(now,rate,ws,wk){
       ${otMode==='week'&&oa?`
       <div style="margin-top:8px">
         <div class="flex" style="justify-content:space-between;font-size:8px;color:var(--mut);margin-bottom:5px">
-          <span>WEEKLY HOURS</span><span id="week-ot-txt">${((priorPool+netSec)/3600).toFixed(1)}h / ${oa}h${ot.inOT?' · IN OT':''}</span>
+          <span>WEEKLY HOURS</span><span id="week-ot-txt">${((priorSec+netSec)/3600).toFixed(1)}h / ${oa}h${ot.inOT?' · IN OT':''}</span>
         </div>
-        <div class="bar-wrap"><div class="bar-fill" id="week-ot-bar" style="width:${Math.min(100,((priorPool+netSec)/(parseFloat(oa)*3600))*100)}%;background:${ot.inOT?'var(--org)':'var(--blu)'}"></div></div>
+        <div class="bar-wrap"><div class="bar-fill" id="week-ot-bar" style="width:${Math.min(100,((priorSec+netSec)/(parseFloat(oa)*3600))*100)}%;background:${ot.inOT?'var(--org)':'var(--blu)'}"></div></div>
       </div>`:''}
       ${S.schedule.breakRules?.length?`
       <div class="flex gap6 mt10" style="flex-wrap:wrap">
@@ -2479,7 +2467,11 @@ function savePaycheck(wk,field,val){
   if(field==='amount'){const v=parseFloat(val);if(v>0)S.paychecks[wk].amount=v;else delete S.paychecks[wk].amount;}
   else if(field==='depositAcct'){S.paychecks[wk].depositAcct=val;save('paychecks');return;}
   else S.paychecks[wk][field]=val;
-  if(!S.paychecks[wk].amount)delete S.paychecks[wk];
+  // Only delete the whole paycheck record if every meaningful field is empty.
+  // (Previously this nuked the date+deposit account as soon as the amount
+  // field was cleared, even if the user had filled in the date first.)
+  const pc=S.paychecks[wk];
+  if(!pc.amount&&!pc.date&&!pc.depositAcct)delete S.paychecks[wk];
   save('paychecks');
 }
 function depositPaycheckToAcct(wk){
@@ -2589,14 +2581,6 @@ function handleBreak(){
     S.pause={...p,onBreak:false,breakStart:null,accBreakSec:(p.accBreakSec||0)+elapsed,dayKey:dk,breakLog:log};
   }
   save('pause');
-  // Immediately commit breaks to persistent breakLog so they survive app restart
-  if(!S.pause.onBreak&&S.pause.breakLog?.length){
-    const activeShift2=getActiveShift(new Date());
-    if(activeShift2){
-      const ws2=getWeekStart(activeShift2.date,S.schedule.weekStartDay,S.schedule.weekStartTime);
-      commitBreakLog(localStr(ws2),dk);
-    }
-  }
   // Re-render to show updated break list immediately
   if(S.app==='tracker'&&S.trackerTab==='tracker')render();
 }
@@ -2610,12 +2594,6 @@ function quickBreak(mins){
   const log=[...(S.pause.breakLog||[]),{id:Date.now().toString(),type:'quick',sec:sec,label:mins+'m',time:now}];
   S.pause={...S.pause,accBreakSec:(S.pause.accBreakSec||0)+sec,dayKey:dk,breakLog:log};
   save('pause');
-  // Immediately commit breaks to persistent breakLog so they survive app restart
-  const _qbShift=getActiveShift(new Date());
-  if(_qbShift){
-    const _qbWs=getWeekStart(_qbShift.date,S.schedule.weekStartDay,S.schedule.weekStartTime);
-    commitBreakLog(localStr(_qbWs),dk);
-  }
   // Re-render to show updated break list immediately
   if(S.app==='tracker'&&S.trackerTab==='tracker')render();
 }
@@ -2682,6 +2660,8 @@ function autoLogCheck(){
         if(sd.getDay()===dow){
           const ws=getWeekStart(sd,sch.weekStartDay,sch.weekStartTime);
           const wk=localStr(ws),dk=dayKey(sd);
+          // Skip if this day is marked as PTO — shift shouldn't be auto-logged
+          if(S.pto[wk]&&S.pto[wk][dk])continue;
           if(!(S.log[wk]&&S.log[wk][dk])){
             const dur=em+1440-sm;
             const _cbl=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
@@ -2701,6 +2681,8 @@ function autoLogCheck(){
         if(nowMin>=em&&nowMin<em+15){
           const ws=getWeekStart(now,sch.weekStartDay,sch.weekStartTime);
           const wk=localStr(ws),dk=dayKey(now);
+          // Skip if this day is marked as PTO — shift shouldn't be auto-logged
+          if(S.pto[wk]&&S.pto[wk][dk])continue;
           if(!(S.log[wk]&&S.log[wk][dk])){
             const dur=em-sm;
             const _cbl=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
@@ -2719,14 +2701,16 @@ function autoLogCheck(){
 }
 setInterval(autoLogCheck,60000);
 
-// On app launch: back-fill any missed shifts from the last 2 days
+// On app launch: back-fill any missed shifts from the last 14 days.
+// Previously only checked the last 2 days, which meant a vacation or any
+// multi-day absence (where the app was never opened) would lose shifts.
 function backfillMissedShifts(){
   const now=new Date(),rate=parseFloat(S.schedule.hourlyRate)||0;
   if(!rate)return;
   const sch=S.schedule;
   let changed=false;
-  // Check yesterday and day before for shifts that ended but were never logged
-  for(let daysBack=0;daysBack<=2;daysBack++){
+  // Check up to 14 days back for shifts that ended but were never logged
+  for(let daysBack=0;daysBack<=14;daysBack++){
     const checkDate=new Date(now);checkDate.setDate(checkDate.getDate()-daysBack);
     const dow=checkDate.getDay();
     const sh=sch.shifts[dow];if(!sh?.active)continue;
@@ -2746,6 +2730,8 @@ function backfillMissedShifts(){
     const wk=localStr(ws),dk=dayKey(checkDate);
     // Skip if covered by custom shift
     if(csCoveredDays(wk).has(dk))continue;
+    // Skip if this day is marked as PTO — shift shouldn't be auto-logged
+    if(S.pto[wk]&&S.pto[wk][dk])continue;
     // Skip if the pause state shows this shift was explicitly paused (Left Early)
     // — pausedAt contains the actual worked seconds
     const ps=lsGet('pause_v3');
@@ -2809,14 +2795,28 @@ function csf(k,v){_csForm[k]=v;renderCSForm();}
 function csfTime(k,v){_csForm[k]=v;renderCSForm();}
 function csfStore(k,v){_csForm[k]=v;}
 function purgeLogDay(dateStr){
-  // Remove a single day's log entry so a custom shift can't double-count
+  // Remove a single day's log entry so a custom shift can't double-count.
+  // Also clear related break log and saved shift-time entries to keep state consistent.
   const wkStr=localStr(getWeekStart(parseLocal(dateStr),S.schedule.weekStartDay,S.schedule.weekStartTime));
-  if(!S.log[wkStr]||!S.log[wkStr][dateStr])return;
-  const wkMap={...S.log[wkStr]};
-  delete wkMap[dateStr];
-  if(Object.keys(wkMap).length>0)S.log={...S.log,[wkStr]:wkMap};
-  else{const l={...S.log};delete l[wkStr];S.log=l;}
-  lsSet('log_v3',S.log);
+  if(S.log[wkStr]&&S.log[wkStr][dateStr]){
+    const wkMap={...S.log[wkStr]};
+    delete wkMap[dateStr];
+    if(Object.keys(wkMap).length>0)S.log={...S.log,[wkStr]:wkMap};
+    else{const l={...S.log};delete l[wkStr];S.log=l;}
+    lsSet('log_v3',S.log);
+  }
+  if(S.breakLog[wkStr]&&S.breakLog[wkStr][dateStr]){
+    const wkBl={...S.breakLog[wkStr]};delete wkBl[dateStr];
+    if(Object.keys(wkBl).length>0)S.breakLog={...S.breakLog,[wkStr]:wkBl};
+    else{const bl={...S.breakLog};delete bl[wkStr];S.breakLog=bl;}
+    lsSet('break_log_v1',S.breakLog);
+  }
+  if(S.shiftTimes[wkStr]&&S.shiftTimes[wkStr][dateStr]){
+    const wkSt={...S.shiftTimes[wkStr]};delete wkSt[dateStr];
+    if(Object.keys(wkSt).length>0)S.shiftTimes={...S.shiftTimes,[wkStr]:wkSt};
+    else{const st={...S.shiftTimes};delete st[wkStr];S.shiftTimes=st;}
+    lsSet('shift_times_v1',S.shiftTimes);
+  }
 }
 function saveCS(){
   if(!_csForm.date)return;
@@ -2922,49 +2922,18 @@ function renderHistoryTab(rate){
       const pc=S.paychecks[w.key];
       const estNet=applyDed(w.gross,S.deductions);
       const pcDiff=pc?.amount?(pc.amount-estNet):null;
-      const isExp=S.expandedWk===w.key;
       let dayRows='';
       if(isExp){
-        // Merge log entries + custom-shift-only dates into unified day list
-        const logDays=Object.entries(S.log[w.key]||{});
-        const csForWk=csInWeek(w.key);
-        const logDaySet=new Set(logDays.map(([dk])=>dk));
-        const csOnlyDays=csForWk.filter(c=>!logDaySet.has(c.date)).map(c=>[c.date,0]);
-        const allDayEntries=[...logDays,...csOnlyDays].sort((a,b)=>a[0].localeCompare(b[0]));
-        // For week-mode OT: track cumulative seconds so each day shows marginal OT
-        let _priorSecCum=0;
-        if(otMode==='week'){
-          // Pre-seed with hourly CS seconds for days that sort before any log entries
-          // (handled inline as we iterate)
-        }
-        dayRows=allDayEntries.map(([dk,sec])=>{
+        const dayEntries=Object.entries(S.log[w.key]||{}).sort((a,b)=>a[0].localeCompare(b[0]));
+        dayRows=dayEntries.map(([dk,sec])=>{
           const dd=parseLocal(dk);
-          const csOnDay=csForWk.filter(c=>c.date===dk);
-          const isCS=csOnDay.length>0;
-          const csHours=csOnDay.reduce((s,c)=>s+(parseFloat(c.hours)||0),0);
-          const csSec=csHours*3600;
-          const effectiveSec=isCS?(sec||csSec):sec;
           const breaks=(S.breakLog[w.key]&&S.breakLog[w.key][dk])||[];
           const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
-          const grossSec=effectiveSec+breakSec;
-          const csEarn=csOnDay.reduce((s,c)=>s+csGross(c),0);
-          let dg;
-          if(isCS&&csOnDay[0].type==='hourly'&&otMode==='week'){
-            // Hourly CS in week-mode: marginal OT contribution
-            dg=calcEarnings(_priorSecCum+csSec,rate,oa,om)-calcEarnings(_priorSecCum,rate,oa,om);
-            _priorSecCum+=csSec;
-          }else if(isCS){
-            dg=csEarn;
-          }else if(otMode==='week'){
-            dg=calcEarnings(_priorSecCum+sec,rate,oa,om)-calcEarnings(_priorSecCum,rate,oa,om);
-            _priorSecCum+=sec;
-          }else{
-            dg=calcEarnings(sec,rate,oa,om);
-          }
+          const grossSec=sec+breakSec;
+          const dg=calcEarnings(sec,rate,oa,om);
           const sh=S.schedule.shifts[dd.getDay()];
           const savedStart=(S.shiftTimes[w.key]&&S.shiftTimes[w.key][dk])||'';
-          const csStart=csOnDay.length===1?csOnDay[0].start||'':'';
-          const shStart=savedStart||csStart||sh?.start||'';
+          const shStart=savedStart||sh?.start||'';
           // Derive end time from scheduled start + gross seconds (net + breaks)
           let shEnd='';
           if(shStart&&grossSec>0){
@@ -2972,9 +2941,13 @@ function renderHistoryTab(rate){
             const endMin=(startMin+Math.round(grossSec/60))%1440;
             shEnd=String(Math.floor(endMin/60)).padStart(2,'0')+':'+String(endMin%60).padStart(2,'0');
           }
-          // Pre-init _hdtStart so editing only end field works without touching start
-          if(shStart)_hdtStart[dk]=shStart;
+          // Pending edits win over re-renders — prevents picker from snapping back
+          // to the saved value while the user is mid-edit (iOS also closes the
+          // picker if we overwrite its bound input value).
+          const pendingStart=_hdtStart[dk];
           const pendingEnd=_hdtEnd[dk];
+          const startVal=(pendingStart!=null&&pendingStart!=='')?pendingStart:shStart;
+          const endVal=(pendingEnd&&pendingEnd.v)?pendingEnd.v:shEnd;
           // Detect if this is the currently active (live) shift day
           const _activeShift=getActiveShift(now);
           const _activeDk=_activeShift?dayKey(_activeShift.date):null;
@@ -2983,44 +2956,29 @@ function renderHistoryTab(rate){
           h+='<div style="padding:10px 0;border-bottom:1px solid var(--bdr)">';
           h+='<div class="flex" style="align-items:center;justify-content:space-between;margin-bottom:6px">';
           h+='<div class="flex" style="align-items:baseline;gap:6px">';
-          h+='<span style="font-size:12px;font-weight:600;color:'+(isCS?'var(--pur)':'var(--txt)')+'">'+DAYS[dd.getDay()]+'</span>';
+          h+='<span style="font-size:12px;font-weight:600;color:var(--txt)">'+DAYS[dd.getDay()]+'</span>';
           h+='<span style="font-size:10px;color:var(--mut)">'+dk+'</span>';
-          if(isCS)h+='<span style="font-size:7px;letter-spacing:1px;color:var(--pur);background:rgba(168,130,255,.15);padding:1px 5px;border-radius:3px">CUSTOM</span>';
           if(isLiveDay)h+='<span style="font-size:8px;color:var(--grn);letter-spacing:1px">LIVE</span>';
-          const _dayInOT=otMode==='week'&&_priorSecCum>(parseFloat(oa)||Infinity)*3600;
-          const _dayPartialOT=otMode==='week'&&!_dayInOT&&(_priorSecCum>(parseFloat(oa)||Infinity)*3600-effectiveSec);
-          if(_dayInOT)h+='<span style="font-size:7px;letter-spacing:1px;color:var(--org);background:rgba(255,173,107,.15);padding:1px 5px;border-radius:3px">OT</span>';
-          else if(_dayPartialOT&&!isCS)h+='<span style="font-size:7px;letter-spacing:1px;color:var(--org);background:rgba(255,173,107,.1);padding:1px 5px;border-radius:3px">PARTIAL OT</span>';
           h+='</div>';
           h+='<div class="flex" style="align-items:center;gap:8px">';
-          h+='<span style="font-size:14px;color:'+(isCS?'var(--pur)':(_dayInOT||_dayPartialOT)?'var(--org)':'var(--acc)')+';font-weight:bold">'+fmt$(dg)+'</span>';
-          if(isCS){h+='<button class="btn-sm btn-red" onclick="deleteCS(\''+csOnDay[0].id+'\')">✕</button>';}
-          else{h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';}
+          h+='<span style="font-size:14px;color:var(--acc);font-weight:bold">'+fmt$(dg)+'</span>';
+          h+='<button class="btn-sm btn-red" onclick="delHistDay(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)">✕</button>';
           h+='</div>';
           h+='</div>';
           if(isLiveDay){
             h+='<div style="font-size:9px;color:var(--mut);margin-bottom:6px">Times locked while shift is active</div>';
-          }else if(isCS&&csOnDay[0].type==='flat'){
-            // Flat custom shifts — no time range
           }else{
           h+='<div class="flex" style="align-items:center;gap:6px;margin-bottom:6px">';
-          h+='<input id="hdt-start-'+dk+'" type="time" value="'+shStart+'" oninput="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
+          h+='<input id="hdt-start-'+dk+'" type="time" value="'+startVal+'" oninput="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" onchange="editHistDayStart(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift start">';
           h+='<span style="font-size:10px;color:var(--mut)">→</span>';
-          h+='<input id="hdt-end-'+dk+'" type="time" value="'+(pendingEnd?pendingEnd.v:shEnd)+'" oninput="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift end">';
-          h+='<span id="hde-apply-'+dk+'" style="opacity:0.3;transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:4px 10px;border-radius:6px;background:transparent;min-height:32px" title="Apply">✓ Apply</button></span>';
+          h+='<input id="hdt-end-'+dk+'" type="time" value="'+endVal+'" oninput="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" onchange="editHistDayEndStore(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;,this.value)" style="flex:1;font-size:13px;padding:6px 8px;min-height:36px" title="Shift end">';
+          h+='<span id="hde-apply-'+dk+'" style="opacity:'+((pendingStart!=null&&pendingStart!==shStart)||pendingEnd?'1':'0.3')+';transition:opacity 0.2s"><button onclick="applyHistDayEdit(&quot;'+w.key+'&quot;,&quot;'+dk+'&quot;)" style="font-size:10px;color:var(--grn);border:1px solid rgba(93,232,160,0.4);padding:4px 10px;border-radius:6px;background:transparent;min-height:32px" title="Apply">✓ Apply</button></span>';
           h+='</div>';
           }
           h+='<div style="font-size:10px;color:var(--mut);line-height:1.6">';
-          if(isCS&&csOnDay[0].type==='flat'){
-            h+='<span style="color:var(--pur)">Flat pay</span>';
-            if(csOnDay[0].label)h+=' &middot; <span>'+csOnDay[0].label+'</span>';
-          }else{
-            h+='<span>'+(grossSec/3600).toFixed(2)+'h gross</span>';
-            if(breakSec>0)h+=' &minus; <span style="color:var(--org)">'+fmtTime(breakSec)+' breaks</span> = <span style="color:var(--grn);font-weight:600">'+(effectiveSec/3600).toFixed(2)+'h net</span>';
-            else h+=' = <span style="color:var(--grn);font-weight:600">'+(effectiveSec/3600).toFixed(2)+'h net</span>';
-            if(isCS&&csOnDay[0].label)h+=' &middot; <span style="color:var(--pur)">'+csOnDay[0].label+'</span>';
-            if(isCS)h+=' &middot; <span style="color:var(--pur)">$'+parseFloat(csOnDay[0].rate).toFixed(2)+'/hr</span>';
-          }
+          h+='<span>'+(grossSec/3600).toFixed(2)+'h gross</span>';
+          if(breakSec>0)h+=' &minus; <span style="color:var(--org)">'+fmtTime(breakSec)+' breaks</span> = <span style="color:var(--grn);font-weight:600">'+(sec/3600).toFixed(2)+'h net</span>';
+          else h+=' = <span style="color:var(--grn);font-weight:600">'+(sec/3600).toFixed(2)+'h net</span>';
           h+='</div>';
           if(breaks.length){
             h+='<div style="margin-top:6px">';
@@ -3209,6 +3167,13 @@ function renderHistoryTab(rate){
     </div>
     ${_hFormOpen?renderHistFormHTML():''}
     ${tabContent}
+    ${S.customShifts.length&&mode==='weeks'?`<div class="mt20">
+      <div class="label">All Custom Shifts</div>
+      ${[...S.customShifts].sort((a,b)=>b.date.localeCompare(a.date)).map(c=>`<div class="flex" style="align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surf);margin-bottom:6px;border-left:2px solid var(--pur)">
+        <div><div style="font-size:12px">${c.label||'Custom Shift'}</div><div style="font-size:9px;color:var(--mut);margin-top:2px">${c.date} · ${c.type==='hourly'?`${c.hours}h @ $${parseFloat(c.rate).toFixed(2)}/hr`:'Flat pay'}</div></div>
+        <div class="right"><div style="font-size:14px;font-weight:bold;color:var(--pur)">${fmt$(csGross(c))}</div><button class="btn-sm" style="color:var(--mut)" onclick="deleteCS('${c.id}')">Remove</button></div>
+      </div>`).join('')}
+    </div>`:''}
   </div>`;
 }
 
@@ -3221,6 +3186,8 @@ function showPayStub(wkStr){
   const ded=S.deductions;
   const d=parseLocal(wkStr);
   const we=wkEnd(parseLocal(wkStr));
+  // gross is the full week gross (log + custom + PTO, with OT applied correctly)
+  const gross=weekGross(dm,'__x__',0,rate,oa,om,otMode,cg,csCoveredDays(wkStr),S.pto[wkStr]);
   let dedLines='',dedTotal=0;
   for(const dd of ded){const v=parseFloat(dd.value)||0;const amt=dd.type==='flat'?v:gross*(v/100);dedTotal+=amt;dedLines+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr)"><span style="font-size:11px;color:var(--mut)">${dd.label}</span><span style="font-size:11px;color:var(--red)">−${fmt$(amt)}</span></div>`;}
   const taxPct=parseFloat(S.taxRate)||0;
@@ -3288,22 +3255,10 @@ function applyHistDayEdit(wk,dk){
   const breaks=(S.breakLog[wk]&&S.breakLog[wk][dk])||[];
   const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
   const netSec=Math.max(0,grossSec-breakSec);
-  // Check for hourly custom shift on this day — update it instead of S.log
-  const csMatch=S.customShifts.find(c=>c.date===dk&&c.type==='hourly');
-  if(csMatch){
-    const grossHrs=(grossSec/3600);
-    const brkMins=Math.round(breakSec/60);
-    csMatch.start=startVal;
-    csMatch.end=endVal;
-    csMatch.breakMins=String(brkMins);
-    csMatch.hours=String(Math.max(0,grossHrs-(brkMins/60)).toFixed(4));
-    save('customShifts');
-  }else{
-    S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
-    save('log');
-  }
+  S.log={...S.log,[wk]:{...(S.log[wk]||{}),[dk]:netSec}};
   S.shiftTimes={...S.shiftTimes,[wk]:{...(S.shiftTimes[wk]||{}),[dk]:startVal}};
   save('shiftTimes');
+  save('log');
   delete _hdtEnd[dk];
   delete _hdtStart[dk];
   renderHistoryTab(parseFloat(S.schedule.hourlyRate)||0);
@@ -3358,12 +3313,8 @@ function delHistDay(wk,dk){
     else{const st={...S.shiftTimes};delete st[wk];S.shiftTimes=st;}
     save('shiftTimes');
   }
-  if(S.pto[wk]&&S.pto[wk][dk]){
-    const wkPto={...S.pto[wk]};delete wkPto[dk];
-    if(Object.keys(wkPto).length)S.pto={...S.pto,[wk]:wkPto};
-    else{const p={...S.pto};delete p[wk];S.pto=p;}
-    save('pto');
-  }
+  // Note: PTO is kept intact — it's an independent concept from worked hours.
+  // Use the dedicated PTO × button to remove a PTO entry.
   save('log');render();
 }
 
@@ -4453,7 +4404,18 @@ function saveExpense(){
   if(!lbl||!amt)return;
   const acctId=document.getElementById('ef-acct')?.value||'';
   const existing=_editExpId?S.expenses.find(x=>x.id===_editExpId):null;
-  const e={id:_editExpId||Date.now().toString(),label:lbl,category:_expForm.category,customCategory:cc,amount:amt,frequency:freq,oneTimeDate:date,dayOfMonth:dom,active:existing?existing.active:true,accountId:acctId};
+  // Preserve fields that the form doesn't expose (active, paid state, debt link, archived)
+  const e={
+    id:_editExpId||Date.now().toString(),
+    label:lbl,category:_expForm.category,customCategory:cc,
+    amount:amt,frequency:freq,oneTimeDate:date,dayOfMonth:dom,
+    active:existing?existing.active!==false:true,
+    accountId:acctId,
+    paid:existing?existing.paid:false,
+    paidDate:existing?existing.paidDate:'',
+    archived:existing?existing.archived:false,
+    _debtId:existing?existing._debtId:undefined
+  };
   if(_editExpId)S.expenses=S.expenses.map(x=>x.id===_editExpId?e:x);
   else S.expenses=[...S.expenses,e];
   save('expenses');_showExpForm=false;_editExpId=null;renderBudgetExpenses();
@@ -4587,7 +4549,7 @@ function renderBudgetForecastCalOnly(){
       if(seenWks.has(wsKey))continue;
       seenWks.add(wsKey);
       const we=wkEnd(ws);
-      const payDate=new Date(we);payDate.setDate(payDate.getDate()+1-offset);
+      const payDate=new Date(we);payDate.setDate(payDate.getDate()+6-offset);
       const pc=S.paychecks[wsKey];
       const actualPay=pc?.date?parseLocal(pc.date):payDate;
       if(actualPay.getFullYear()===yr&&actualPay.getMonth()===mo){
@@ -4825,7 +4787,7 @@ function renderCalHistory(){
       if(seenWks.has(wsKey))continue;
       seenWks.add(wsKey);
       const we=wkEnd(ws);
-      const payDate=new Date(we);payDate.setDate(payDate.getDate()+1-offset);
+      const payDate=new Date(we);payDate.setDate(payDate.getDate()+6-offset);
       const pc=S.paychecks[wsKey];
       const actualPay=pc?.date?parseLocal(pc.date):payDate;
       if(actualPay.getFullYear()===yr&&actualPay.getMonth()===mo){
