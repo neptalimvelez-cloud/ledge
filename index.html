@@ -2916,8 +2916,8 @@ function renderHistoryTab(rate){
   let tabContent='';
   if(mode==='weeks'){
     tabContent=allWks.slice(0,20).map(w=>{
+      const isExp=S.expandedWk===w.key;
       const d=parseLocal(w.key),ded=w.gross-applyDed(w.gross,S.deductions),net=w.gross-ded,cur=w.key===curWk;
-      const isExp=w.key===S.expandedWk;
       const cg=csInWeek(w.key);
       const cgAmt=cg.reduce((s,c)=>s+csGross(c),0);
       const pc=S.paychecks[w.key];
@@ -2926,20 +2926,12 @@ function renderHistoryTab(rate){
       let dayRows='';
       if(isExp){
         const dayEntries=Object.entries(S.log[w.key]||{}).sort((a,b)=>a[0].localeCompare(b[0]));
-        // Cumulative OT: marginal OT depends on prior seconds in the pay week.
-        // Run a counter across sorted days so each day's dg reflects the correct
-        // split between base and overtime portions.
-        let _priorSecCum=0;
         dayRows=dayEntries.map(([dk,sec])=>{
           const dd=parseLocal(dk);
           const breaks=(S.breakLog[w.key]&&S.breakLog[w.key][dk])||[];
           const breakSec=breaks.reduce((s,b)=>s+b.sec,0);
           const grossSec=sec+breakSec;
-          // Marginal OT earnings for this day only: total-up-to-and-including minus total-before
-          const _after=calcEarnings(_priorSecCum+sec,rate,oa,om);
-          const _before=calcEarnings(_priorSecCum,rate,oa,om);
-          const dg=_after-_before;
-          _priorSecCum+=sec;
+          const dg=calcEarnings(sec,rate,oa,om);
           const sh=S.schedule.shifts[dd.getDay()];
           const savedStart=(S.shiftTimes[w.key]&&S.shiftTimes[w.key][dk])||'';
           const shStart=savedStart||sh?.start||'';
