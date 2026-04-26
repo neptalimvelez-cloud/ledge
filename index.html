@@ -2277,9 +2277,10 @@ function renderTrackerTab(now,rate,ws,wk){
       const prevWkEnd=wkEnd(prevWkStart);
       const prevWkLabel=`${MONTHS[prevWkStart.getMonth()]} ${prevWkStart.getDate()} – ${MONTHS[prevWkEnd.getMonth()]} ${prevWkEnd.getDate()}`;
       const prevDm=S.log[prevWk]||{};
-      const prevCsG=csInWeek(prevWk);
+      const prevCsList=csInWeek(prevWk);
+      const prevCsGAmt=prevCsList.reduce((s,c)=>s+csGross(c),0);
       const prevCov=csCoveredDays(prevWk);
-      const prevGross=weekGross(prevDm,'__x__',0,rate,oa,om,otMode,prevCsG,prevCov,S.pto[prevWk]);
+      const prevGross=weekGross(prevDm,'__x__',0,rate,oa,om,otMode,prevCsList,prevCov,S.pto[prevWk]);
       const prevNet=applyDed(prevGross,S.deductions);
       const prevPc=S.paychecks[prevWk];
       const prevVariance=prevPc?.amount?(prevPc.amount-prevNet):null;
@@ -2348,9 +2349,8 @@ function renderTrackerTab(now,rate,ws,wk){
               bd+='<div class="row"><span class="rl" style="color:var(--blu)">☂ PTO</span><span class="rr" style="color:var(--blu)">'+(ptoSec/3600).toFixed(1)+'h → '+fmt$(ptoEarn)+'</span></div>';
             }
             // Custom shifts
-            if(prevCsG>0){
-              const csList=csInWeek(prevWk);
-              bd+='<div class="row"><span class="rl" style="color:var(--pur)">Custom shifts ('+csList.length+')</span><span class="rr" style="color:var(--pur)">'+fmt$(prevCsG)+'</span></div>';
+            if(prevCsGAmt>0){
+              bd+='<div class="row"><span class="rl" style="color:var(--pur)">Custom shifts ('+prevCsList.length+')</span><span class="rr" style="color:var(--pur)">'+fmt$(prevCsGAmt)+'</span></div>';
             }
             // Breaks total
             if(totalBrkSec>0){
@@ -3031,6 +3031,30 @@ function renderHistoryTab(rate){
         ${isExp?`<div class="wk-body">
           <div class="label2 mb8">Day Breakdown — set end time to edit hours</div>
           ${dayRows||'<div style="font-size:10px;color:var(--mut2)">No logged shifts</div>'}
+          ${(()=>{
+            const wkCsList=csInWeek(w.key);
+            if(!wkCsList.length)return'';
+            let ch='<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--bdr)">';
+            ch+='<div class="label2" style="color:var(--pur);margin-bottom:6px">\u25C9 Custom Shifts</div>';
+            for(const c of wkCsList){
+              const hrs=c.type==='hourly'?(parseFloat(c.hours)||0)+'h @ '+fmt$(parseFloat(c.rate)||0)+'/hr':'flat pay';
+              const gr=csGross(c);
+              const dd=parseLocal(c.date);
+              ch+='<div class="flex" style="align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bdr)">';
+              ch+='<div class="flex" style="align-items:baseline;gap:6px">';
+              ch+='<span style="font-size:12px;font-weight:600;color:var(--pur)">'+DAYS[dd.getDay()]+'</span>';
+              ch+='<span style="font-size:10px;color:var(--mut)">'+c.date+'</span>';
+              ch+='<span style="font-size:10px;color:var(--pur)">'+((c.label)||'Custom Shift')+'</span>';
+              ch+='</div>';
+              ch+='<div class="flex" style="align-items:center;gap:8px">';
+              ch+='<div style="text-align:right"><div style="font-size:13px;font-weight:bold;color:var(--pur)">'+fmt$(gr)+'</div>';
+              ch+='<div style="font-size:8px;color:var(--mut)">'+hrs+'</div></div>';
+              ch+='<button class="btn-sm btn-red" onclick="deleteCS(\''+c.id+'\')">✕</button>';
+              ch+='</div></div>';
+            }
+            ch+='</div>';
+            return ch;
+          })()}
           ${(()=>{
             const wkPto=S.pto[w.key]||{};
             const ptoEntries=Object.entries(wkPto).sort((a,b)=>a[0].localeCompare(b[0]));
